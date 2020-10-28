@@ -2,7 +2,7 @@
 # Heili Lowman
 # October 22, 2020
 
-# This script will not be posted to GitHub, because the data files it will pull are too large to store on GitHub.
+# Again, the dataset pulled in below will not be posted to GitHub, because the file is too large to store on GitHub.
 
 #### PACKAGES ####
 
@@ -12,7 +12,7 @@ library(tidyverse) # loaded for data manipulation
 
 # Load in perennial stream assessment (PSA) dataset located on SCCWRP server in Maps > Data > PSA_Frame.
 
-ps6 <- read_csv('hw_datasets/PSA_SurveyFrame_08312012.csv')
+ps6 <- read_csv('/Users/heilil/Desktop/hw_datasets/PSA_SurveyFrame_08312012.csv')
 
 #### DATA TIDYING ####
 
