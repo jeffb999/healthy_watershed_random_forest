@@ -20,6 +20,8 @@ asci_df <- read_csv("asci_rf_data2.csv") %>% # Loads in dataset pulled on 10/28/
   drop_na(asci) # Drop the NA values.
 skim(asci_df) # Examine the dataset.
 str(asci_df)
+
+
 # Watershed characteristics' data available from StreamCat.
 ca <- read_csv("streamcat_params.csv")
 skim(ca)
@@ -36,9 +38,14 @@ mydf <- asci_df %>%
 skim(mydf) # Examing completeness of this joined dataset.
 length(unique(mydf$COMID)) # Checking for duplicates. 1215 unique COMIDs.
 
+
+
+
+
 # Pull out only one instance of each COMID.
 set.seed(1) # Every time I run the code below, it's based on the same random pull of data.
 mydf2 <- mydf %>% 
+  filter(stationcode!="109PS0162") %>% #There's only one site missing RdDensCatRp100. Better to drop the site than to drop the metric
   group_by(COMID) %>%
   sample_n(size = 1) %>% 
   ungroup()
@@ -66,10 +73,21 @@ nottrain <- ca %>% # all COMIDS from StreamCat data, sampled or not
   filter(!COMID %in% mydf2_train$COMID) # Removing sites used to train the model. n = 139798
 
 # Step Three - Kitchen Sink model -----------------------------------------
+#RDM: Create a vector of variables used by marcus to create the scape tool
+
+SCAPE_varz<-c("CanalDensCat","CanalDensWs",
+  #need to get impervious
+  "PctUrbCat","PctUrbWs","PctAgCat","PctAgWs",
+  "PctUrbCatRp100","PctUrbWsRp100","PctAgCatRp100","PctAgWsRp100",
+  "RdDensCat","RdDensWs","RdDensCatRp100","RdDensWsRp100",
+  "RdCrsCat","RdCrsWs"
+  )
 
 # Create finalized training dataset and include all possible variables. 
 rf_dat <- mydf2_train %>%
-  select(-stationcode, -COMID, -PSA6, -Length_Fin, -RdDensCatRp100) # Dropping variable due to incompleteness.
+  # select(-stationcode, -COMID, -PSA6, -Length_Fin, -RdDensCatRp100) # Dropping variable due to incompleteness.
+  select(-stationcode, -COMID, -PSA6, -Length_Fin) # RDM: Recommend keeping road density
+
 
 # Random forest -- 
 # a decision tree model, using predictors to answer dichotomous questions to create nested splits.
@@ -190,5 +208,31 @@ predict(myqrf) # automatically presents 10th %tile, median, and 90th %tile
 
 plot(myqrf) # plots the results.
 # Again appears to improve after ~100 trees.
+
+#RDM: We need to create a dataframe of predictions from the qrf model for all COMIDs in California, like we did for the random forest model above
+#RDM: Predictions should be a blend of out-of-bag predictions for COMIDs used in calibration, and predictions using the newdata argument.
+#RDM: For the SCAPE tool, we actually calculated every percentile between .05 to .95 by increments of 0.05. Might as well do the same here.
+
+#We should also generate plots:
+#Observed vs predicted (q50), training/testing data separately
+#Calculate a number of model performance parameters 
+#Look for factors that may unveil bias in the model (e.g., compare residuals by PSA region)
+#Finally, create maps
+
+#Classification options:
+#"Constrained" approach, following Beck et al. 2019: Compare q10, q50, and q90 to ASCI 10th percentile threshold (i.e., 0.82)
+#Likely constrained: q90 < 0.82
+#Possibly constrained: q50 < 0.82
+#Possibly unconstrained: q50 >= 0.82 and q10 < 0.82
+#Likely unconstrained: q10 > 0.82
+
+#"Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93)
+# Very likely altered: q50 < 0.67
+# Likely altered: q50 < 0.82
+# Possibly altered: q50 < 0.93
+# Likely unaltered: q50 >= 0.93
+
+# Create statewide and regional maps for each classification method
+
 
 # End of R script.
