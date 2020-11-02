@@ -21,7 +21,6 @@ asci_df <- read_csv("asci_rf_data2.csv") %>% # Loads in dataset pulled on 10/28/
 skim(asci_df) # Examine the dataset.
 str(asci_df)
 
-
 # Watershed characteristics' data available from StreamCat.
 ca <- read_csv("streamcat_params.csv")
 skim(ca)
@@ -37,10 +36,6 @@ mydf <- asci_df %>%
   inner_join(ps6)
 skim(mydf) # Examing completeness of this joined dataset.
 length(unique(mydf$COMID)) # Checking for duplicates. 1215 unique COMIDs.
-
-
-
-
 
 # Pull out only one instance of each COMID.
 set.seed(1) # Every time I run the code below, it's based on the same random pull of data.
@@ -74,7 +69,6 @@ nottrain <- ca %>% # all COMIDS from StreamCat data, sampled or not
 
 # Step Three - Kitchen Sink model -----------------------------------------
 #RDM: Create a vector of variables used by marcus to create the scape tool
-
 SCAPE_varz<-c("CanalDensCat","CanalDensWs",
   #need to get impervious
   "PctUrbCat","PctUrbWs","PctAgCat","PctAgWs",
@@ -82,12 +76,10 @@ SCAPE_varz<-c("CanalDensCat","CanalDensWs",
   "RdDensCat","RdDensWs","RdDensCatRp100","RdDensWsRp100",
   "RdCrsCat","RdCrsWs"
   )
-
+# Adding in this "kitchen sink" model, to help with descriptive power and toss out parameters.
 # Create finalized training dataset and include all possible variables. 
 rf_dat <- mydf2_train %>%
-  # select(-stationcode, -COMID, -PSA6, -Length_Fin, -RdDensCatRp100) # Dropping variable due to incompleteness.
   select(-stationcode, -COMID, -PSA6, -Length_Fin) # RDM: Recommend keeping road density
-
 
 # Random forest -- 
 # a decision tree model, using predictors to answer dichotomous questions to create nested splits.
@@ -104,7 +96,7 @@ myrf <- randomForest(y = rf_dat$asci, # dependent variable
   ntrees = 500) # 500 trees. 
 
 myrf # examine the results.
-# 40.27% variance explained.
+# 40.48% variance explained.
 
 summary(myrf)
 # mtry allows you to parameterize the number of splits
@@ -169,7 +161,7 @@ my_ctrl <- rfeControl(functions = rfFuncs,
 set.seed(22)
 my_rfe <- rfe(y = rf_dat$asci, # set dependent variable
               x = rf_dat %>% select(-asci), # set predictor variables
-              size = 3:30, # sets how many variables are in the overall model
+              size = c(3:10, 15, 20, 25, 30), # sets how many variables are in the overall model
               rfeControl = my_ctrl) # pull in control from above
 
 # can you make your model even simpler?
@@ -179,11 +171,81 @@ my_size <- pickSizeTolerance(my_rfe$results, metric = "RMSE", tol = 1, maximize 
 # lower tol (~1) gives you more variables - "I'm taking the simplest model that's within 1% of the best model."
 pickVars(my_rfe$variables, size = my_size)
 
-# Results of pickVars: RdCrsWs, PctAgWs, PctUrbWsRp100, PctOpWsRp100, PctOpWs, 
-# DamDensWs, RdDensWs, NABD_DensWs, PctUrbWs, PctUrbCatRp100, 
-# RdDensWsRp100, PctOpCat, PctUrbCat, RdDensCat, CBNFWs
-# PctOpCatRp100, PctAgWsRp100, TRIDensWs, AgKffactWs, FertWs
-# NEXT STEPS - use these predictors in quant reg forest. and then apply to statewide.
+# Results of pickVars: RdCrsWs, PctAgWs, PctOpWsRp100, PctOpWs, PctUrbWsRp100,
+# NABD_DensWs, RdDensWs, PctUrbWs, DamDensWs, RdDensCatRp100, 
+# PctUrbCatRp100, RdDensWsRp100, PctUrbCat, PctAgWsRp100, PctOpCat,
+# CBNFWs, PctOpCatRp100, TRIDensWs, AgKffactWs, RdDensCat
+
+# Following a discussion with Rafi, for my first meeting with the State WaterBoard folks, I'm going to proceed with a regular RF that yields median values and fit those into the following classification scheme:
+
+#Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93) @ reference sites (1st, 10th, 30th percentiles)
+# Very likely altered: q50 < 0.67
+# Likely altered: q50 < 0.82
+# Possibly altered: q50 < 0.93
+# Likely unaltered: q50 >= 0.93
+
+# Predict scores using the above 20 variables:
+
+# Create re-finalized training dataset and include all possible variables. 
+rf_dat2 <- mydf2_train %>%
+  select(asci, RdCrsWs, PctAgWs, PctOpWsRp100, PctOpWs, PctUrbWsRp100, NABD_DensWs, RdDensWs, PctUrbWs, DamDensWs, RdDensCatRp100, PctUrbCatRp100, RdDensWsRp100, PctUrbCat, PctAgWsRp100, PctOpCat, CBNFWs, PctOpCatRp100, TRIDensWs, AgKffactWs, RdDensCat)
+
+set.seed(4) # assures the data pulled is random, but sets it for the run below (makes outcome stable)
+myrf2 <- randomForest(y = rf_dat2$asci, # dependent variable
+  x = rf_dat2 %>%
+    select(-asci),
+  importance = T, 
+  proximity = T, 
+  ntrees = 500)  
+
+myrf2 # examine the results. 41.25% variance explained. It went up from the ~40 variable model!
+summary(myrf2)
+plot(myrf2) # need min of 200 trees.
+varImpPlot(myrf2)
+
+imp2 <- myrf2$importance
+View(imp2) # displays the data plotted in the plot above
+
+predict(myrf2) # returns out of bag predictions for training data
+
+# Predict ASCI scores state-wide.
+nottrain_prediction2 <- nottrain %>% # taking all COMIDS that haven't been used to train the model
+  na.omit() %>% # remove NAs
+  mutate(asci_predicted = predict(myrf2, newdata = nottrain %>% na.omit())) # using developed model (myrf2), inputting predictor variables (nottrain - which contains COMIDs and associated StreamCat data) to predict output/dependent variable (asci_predicted a.k.a. ASCI).
+
+# rePredict ASCI scores for training data.
+mydf2_train2 <- mydf2_train
+mydf2_train2$asci_predicted <- predict(myrf2) # Adds column of predicted ASCI values to training dataset.
+
+# Creates new dataset of bound rows for both ...
+ca_predictions2 <- bind_rows(nottrain_prediction2 %>%
+    mutate(Set = "Non-training"), # statewide COMIDs (not used for training data)
+  mydf2_train2 %>%
+    mutate(Set = "Training")) # COMIDS from training dataset (used for training the model).
+# This creates the dataset that will be plotted.
+
+# Create table of number of sites that fall into each category.
+
+# Add classification column.
+ca_predictions2 <- ca_predictions2 %>%
+  mutate(classification = case_when(asci_predicted < 0.67~"Very Likely Altered",
+    asci_predicted < 0.82~"Likely Altered",
+    asci_predicted < 0.93~"Possibly Altered",
+    asci_predicted >= 0.93~"Likely Unaltered")) %>%
+  mutate(class_f = factor(classification, levels = c("Very Likely Altered", "Likely Altered", "Possibly Altered", "Likely Unaltered"))) # relevel classifications
+
+# Summary table by site #.
+ca_summary <- ca_predictions2 %>%
+  count(class_f) # count sites statewide by classification
+
+# Summary table by stream length (m)
+ca_summary_length <- ca_predictions2 %>%
+  group_by(class_f) %>% # group by classification
+  summarize(length = sum(Length_Fin, na.rm=TRUE)) # sum stream lengths
+
+# Join and export.
+ca_sum <- full_join(ca_summary, ca_summary_length)
+# write_csv(ca_sum, "rf_results_summary.csv")
 
 # Step Five - Quantile Regression model -----------------------------------
 
@@ -209,6 +271,8 @@ predict(myqrf) # automatically presents 10th %tile, median, and 90th %tile
 plot(myqrf) # plots the results.
 # Again appears to improve after ~100 trees.
 
+# TO DOs:
+
 #RDM: We need to create a dataframe of predictions from the qrf model for all COMIDs in California, like we did for the random forest model above
 #RDM: Predictions should be a blend of out-of-bag predictions for COMIDs used in calibration, and predictions using the newdata argument.
 #RDM: For the SCAPE tool, we actually calculated every percentile between .05 to .95 by increments of 0.05. Might as well do the same here.
@@ -226,13 +290,12 @@ plot(myqrf) # plots the results.
 #Possibly unconstrained: q50 >= 0.82 and q10 < 0.82
 #Likely unconstrained: q10 > 0.82
 
-#"Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93)
+#"Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93) @ reference sites (1st, 10th, 30th percentiles)
 # Very likely altered: q50 < 0.67
 # Likely altered: q50 < 0.82
 # Possibly altered: q50 < 0.93
 # Likely unaltered: q50 >= 0.93
 
 # Create statewide and regional maps for each classification method
-
 
 # End of R script.
