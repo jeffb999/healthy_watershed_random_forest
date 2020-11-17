@@ -12,14 +12,14 @@ library(tidyverse) # loaded for data manipulation
 
 # Load in datasets (organized by state) downloaded from the streamcat website : https://www.epa.gov/national-aquatic-resource-surveys/streamcat-dataset-0
 
-/Users/heilil/Desktop/
-
 agnitrogen <- read_csv('/Users/heilil/Desktop/hw_datasets/AgriculturalNitrogen_CA.csv')
 candensity <- read_csv('/Users/heilil/Desktop/hw_datasets/CanalDensity_CA.csv')
 dams <- read_csv('/Users/heilil/Desktop/hw_datasets/Dams_CA.csv')
 epa <- read_csv('/Users/heilil/Desktop/hw_datasets/EPA_FRS_CA.csv')
 geochem <- read_csv('/Users/heilil/Desktop/hw_datasets/GeoChemPhys1_CA.csv')
 kff <- read_csv('/Users/heilil/Desktop/hw_datasets/Kffact_CA.csv')
+imp <- read_csv('/Users/heilil/Desktop/hw_datasets/ImperviousSurfaces2011_CA.csv')
+imprp <- read_csv('/Users/heilil/Desktop/hw_datasets/ImperviousSurfaces2011RipBuf100_CA.csv')
 mines <- read_csv('/Users/heilil/Desktop/hw_datasets/Mines_CA.csv')
 minesrp <- read_csv('/Users/heilil/Desktop/hw_datasets/MinesRipBuf100_CA.csv')
 nabd <- read_csv('/Users/heilil/Desktop/hw_datasets/NABD_CA.csv')
@@ -36,7 +36,7 @@ stats <- read_csv('/Users/heilil/Desktop/hw_datasets/STATSGO_Set2_CA.csv')
 # Select only columns containing data of interest.
 # Note, the below has been edited to aggregate:
 # (1) only parameters directly related to human activity
-# (2) parameters by % urban, % ag, and % open land uses
+# (2) parameters by % urban, % ag, and % open land uses - although I ended up taking out open
 
 agnitrogen1 <- agnitrogen %>%
   select(COMID, FertCat, FertWs, CBNFCat, CBNFWs, ManureCat, ManureWs)
@@ -54,6 +54,12 @@ epa1 <- epa %>%
 
 kff1 <- kff %>%
   select(COMID, AgKffactCat, AgKffactWs)
+
+imp1 <- imp %>%
+  select(COMID, PctImp2011Cat, PctImp2011Ws)
+  
+imprp1 <- imprp %>%
+  select(COMID, PctImp2011CatRp100, PctImp2011WsRp100)
 
 mines1 <- mines %>%
   select(COMID, MineDensCat, MineDensWs)
@@ -108,13 +114,15 @@ A <- full_join(agnitrogen1, candensity1)
 B <- full_join(A, dams1)
 C <- full_join(B, epa1)
 D <- full_join(C, kff1)
-E <- full_join(D, mines1)
-FF <- full_join(E, nabd1)
-G <- full_join(FF, nlcd16_2)
-H <- full_join(G, nlcd16rp2)
-I <- full_join(H, rddensity1)
-J <- full_join(I, rddensityrp1)
-asci_streamcat_params <- full_join(J, rdstream1)
+E <- full_join(D, imp1)
+FF <- full_join(E, imprp1)
+G <- full_join(FF, mines1)
+H <- full_join(G, nabd1)
+I <- full_join(H, nlcd16_2)
+J <- full_join(I, nlcd16rp2)
+K <- full_join(J, rddensity1)
+L <- full_join(K, rddensityrp1)
+asci_streamcat_params <- full_join(L, rdstream1)
 
 #### DATA EXPORT ####
 
