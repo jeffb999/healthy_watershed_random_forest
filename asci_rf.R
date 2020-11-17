@@ -33,7 +33,8 @@ ps6 <- read_csv("ps6_params.csv")
 mydf <- asci_df %>%
   select(stationcode, COMID, asci) %>%
   inner_join(ca) %>%
-  inner_join(ps6)
+  inner_join(ps6) %>%
+  select(-c(PctOpCat, PctOpWs, PctOpCatRp100, PctOpWsRp100, NPDESDensCat, NPDESDensWs, TRIDensCat, TRIDensWs, SuperfundDensCat, SuperfundDensWs)) # Remove "open" land use and discharge site columns.
 skim(mydf) # Examing completeness of this joined dataset.
 length(unique(mydf$COMID)) # Checking for duplicates. 1215 unique COMIDs.
 
@@ -69,17 +70,11 @@ nottrain <- ca %>% # all COMIDS from StreamCat data, sampled or not
 
 # Step Three - Kitchen Sink model -----------------------------------------
 #RDM: Create a vector of variables used by marcus to create the scape tool
-SCAPE_varz<-c("CanalDensCat","CanalDensWs",
-  #need to get impervious
-  "PctUrbCat","PctUrbWs","PctAgCat","PctAgWs",
-  "PctUrbCatRp100","PctUrbWsRp100","PctAgCatRp100","PctAgWsRp100",
-  "RdDensCat","RdDensWs","RdDensCatRp100","RdDensWsRp100",
-  "RdCrsCat","RdCrsWs"
-  )
-# Adding in this "kitchen sink" model, to help with descriptive power and toss out parameters.
+SCAPE_varz<-c("CanalDensCat","CanalDensWs", "PctImp2011Cat", "PctImp2011Ws", "PctImp2011CatRp100", "PctImp2011WsRp100", "PctUrbCat","PctUrbWs","PctAgCat","PctAgWs", "PctUrbCatRp100","PctUrbWsRp100","PctAgCatRp100","PctAgWsRp100", "RdDensCat","RdDensWs","RdDensCatRp100","RdDensWsRp100", "RdCrsCat","RdCrsWs")
+
 # Create finalized training dataset and include all possible variables. 
 rf_dat <- mydf2_train %>%
-  select(-stationcode, -COMID, -PSA6, -Length_Fin) # RDM: Recommend keeping road density
+  select(-stationcode, -COMID, -PSA6, -Length_Fin)
 
 # Random forest -- 
 # a decision tree model, using predictors to answer dichotomous questions to create nested splits.
@@ -96,13 +91,13 @@ myrf <- randomForest(y = rf_dat$asci, # dependent variable
   ntrees = 500) # 500 trees. 
 
 myrf # examine the results.
-# 40.48% variance explained.
+# 39.36% variance explained.
 
 summary(myrf)
 # mtry allows you to parameterize the number of splits
 
 plot(myrf)
-# model performance appears to improve most at ~100 trees
+# model performance appears to improve most at ~125 trees
 
 varImpPlot(myrf)
 # displays which variables are most important
@@ -111,10 +106,10 @@ varImpPlot(myrf)
 # right pane also shows how evenly things split based on the list of predictors
 # values close to 0 can be dropped, but don't have to be
 
-# In both panes - agricultural land use and stream-road crossings, both at the watershed scale, as well as open land use in the riparian areas appear important.
+# In both panes - urban/ag land use, impervious land cover, dam presence, and stream-road crossings appear important.
 
-imp <- myrf$importance
-View(imp)
+importance <- myrf$importance
+View(importance)
 # displays the data plotted in the plot above
 
 predict(myrf)
@@ -161,7 +156,7 @@ my_ctrl <- rfeControl(functions = rfFuncs,
 set.seed(22)
 my_rfe <- rfe(y = rf_dat$asci, # set dependent variable
               x = rf_dat %>% select(-asci), # set predictor variables
-              size = c(3:10, 15, 20, 25, 30), # sets how many variables are in the overall model
+              size = c(3:10, 15, 20, 25, 30), # sets how many variables are in the overall model - I have 34 total possible variables.
               rfeControl = my_ctrl) # pull in control from above
 
 # can you make your model even simpler?
@@ -171,12 +166,10 @@ my_size <- pickSizeTolerance(my_rfe$results, metric = "RMSE", tol = 1, maximize 
 # lower tol (~1) gives you more variables - "I'm taking the simplest model that's within 1% of the best model."
 pickVars(my_rfe$variables, size = my_size)
 
-# Results of pickVars: RdCrsWs, PctAgWs, PctOpWsRp100, PctOpWs, PctUrbWsRp100,
-# NABD_DensWs, RdDensWs, PctUrbWs, DamDensWs, RdDensCatRp100, 
-# PctUrbCatRp100, RdDensWsRp100, PctUrbCat, PctAgWsRp100, PctOpCat,
-# CBNFWs, PctOpCatRp100, TRIDensWs, AgKffactWs, RdDensCat
+# pickVars (10): RdCrsWs, PctImp2011Ws, PctAgWs, PctUrbWsRp100, PctImp2011WsRp100,
+# PctUrbWs, RdDensWs, DamDensWs, RdDensWsRp100, RdDensCatRp100
 
-# Following a discussion with Rafi, for my first meeting with the State WaterBoard folks, I'm going to proceed with a regular RF that yields median values and fit those into the following classification scheme:
+# Proceed with a regular RF that yields median values and fit those into the following classification scheme:
 
 #Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93) @ reference sites (1st, 10th, 30th percentiles)
 # Very likely altered: q50 < 0.67
@@ -184,11 +177,11 @@ pickVars(my_rfe$variables, size = my_size)
 # Possibly altered: q50 < 0.93
 # Likely unaltered: q50 >= 0.93
 
-# Predict scores using the above 20 variables:
+# Predict scores using the above 10 variables:
 
 # Create re-finalized training dataset and include all possible variables. 
 rf_dat2 <- mydf2_train %>%
-  select(asci, RdCrsWs, PctAgWs, PctOpWsRp100, PctOpWs, PctUrbWsRp100, NABD_DensWs, RdDensWs, PctUrbWs, DamDensWs, RdDensCatRp100, PctUrbCatRp100, RdDensWsRp100, PctUrbCat, PctAgWsRp100, PctOpCat, CBNFWs, PctOpCatRp100, TRIDensWs, AgKffactWs, RdDensCat)
+  select(asci, RdCrsWs, PctImp2011Ws, PctAgWs, PctUrbWsRp100, PctImp2011WsRp100, PctUrbWs, RdDensWs, DamDensWs, RdDensWsRp100, RdDensCatRp100)
 
 set.seed(4) # assures the data pulled is random, but sets it for the run below (makes outcome stable)
 myrf2 <- randomForest(y = rf_dat2$asci, # dependent variable
@@ -198,13 +191,14 @@ myrf2 <- randomForest(y = rf_dat2$asci, # dependent variable
   proximity = T, 
   ntrees = 500)  
 
-myrf2 # examine the results. 41.25% variance explained. It went up from the ~40 variable model!
+myrf2 # examine the results. 
+# 39.79% variance explained.
 summary(myrf2)
-plot(myrf2) # need min of 200 trees.
+plot(myrf2) # need min of 100 trees.
 varImpPlot(myrf2)
 
-imp2 <- myrf2$importance
-View(imp2) # displays the data plotted in the plot above
+importance2 <- myrf2$importance
+View(importance2) # displays the data plotted in the plot above
 
 predict(myrf2) # returns out of bag predictions for training data
 
@@ -248,7 +242,7 @@ ca_sum <- full_join(ca_summary, ca_summary_length)
 # write_csv(ca_sum, "rf_results_summary.csv")
 
 # Step Five - Quantile Regression model -----------------------------------
-
+# Note - for the Health Watersheds Project, I did not pursue this structure.
 # Quantile random forest regression mode, instead of looking at the mode of trees, can compare to 10th, 50th, 90th percentiles etc.
 
 # Need to make a new dataset taking the above results of pickVars into account.
@@ -271,17 +265,20 @@ predict(myqrf) # automatically presents 10th %tile, median, and 90th %tile
 plot(myqrf) # plots the results.
 # Again appears to improve after ~100 trees.
 
-# TO DOs:
 
-#RDM: We need to create a dataframe of predictions from the qrf model for all COMIDs in California, like we did for the random forest model above
-#RDM: Predictions should be a blend of out-of-bag predictions for COMIDs used in calibration, and predictions using the newdata argument.
-#RDM: For the SCAPE tool, we actually calculated every percentile between .05 to .95 by increments of 0.05. Might as well do the same here.
+# Step Six - Model validation ---------------------------------------------
 
-#We should also generate plots:
-#Observed vs predicted (q50), training/testing data separately
-#Calculate a number of model performance parameters 
-#Look for factors that may unveil bias in the model (e.g., compare residuals by PSA region)
-#Finally, create maps
+# AUC values
+
+# Compare residuals by PSA region
+
+# Other model performance parameters
+
+# Step Seven - Map results state-wide -------------------------------------
+
+
+
+# Additional Notes - Healthy Watersheds project ---------------------------
 
 #Classification options:
 #"Constrained" approach, following Beck et al. 2019: Compare q10, q50, and q90 to ASCI 10th percentile threshold (i.e., 0.82)
@@ -296,6 +293,6 @@ plot(myqrf) # plots the results.
 # Possibly altered: q50 < 0.93
 # Likely unaltered: q50 >= 0.93
 
-# Create statewide and regional maps for each classification method
+# Condition approach favored by Anna per meeting on 11/3/2020.
 
 # End of R script.
