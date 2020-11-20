@@ -365,9 +365,19 @@ dc$error.cv
 
 # Using ca_predictions2 dataset generated above. But need to first associate lat/lon with each COMID.
 
-# Load in NHD_Plus_CA dataset from Annie.
-
+# Load in NHD_Plus_CA dataset from Annie as well as watersheds from Jeff.
+# Full state of California
 nhd_ca <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Plus_CA/NHDPlus_V2_FLowline_CA.shp") %>%
+  mutate(COMID = as.numeric(COMID))
+
+# South Coast watersheds - Ventura River, San Juan Creek, San Diego River
+nhd_vr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/VenturaRiver_NHD_Clip.shp") %>%
+  mutate(COMID = as.numeric(COMID))
+
+nhd_sjc <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanJuanCreek_NHD_Clip.shp") %>%
+  mutate(COMID = as.numeric(COMID))
+
+nhd_sdr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanDiegoRiver_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
 # Filter and plot one COMID to make sure it works.
@@ -398,6 +408,63 @@ modeled_asci_map
 #      path = "/Users/heilil/Desktop/R_figures",
 #      width = 35,
 #      height = 35,
+#      units = "cm"
+#    )
+
+# Ventura River inset
+
+ventura_asci_map <- nhd_vr %>%
+  filter(COMID %in% mcomid) %>%
+  inner_join(ca_predictions2) %>%
+  ggplot() +
+  geom_sf(aes(color = class_f)) +
+  scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
+  labs(title = "Ventura River") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+ventura_asci_map
+
+# San Juan Creek inset
+
+sanjuan_asci_map <- nhd_sjc %>%
+  filter(COMID %in% mcomid) %>%
+  inner_join(ca_predictions2) %>%
+  ggplot() +
+  geom_sf(aes(color = class_f)) +
+  scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
+  labs(title = "San Juan Creek") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+sanjuan_asci_map
+
+# San Diego River inset
+
+sandiego_asci_map <- nhd_sdr %>%
+  filter(COMID %in% mcomid) %>%
+  inner_join(ca_predictions2) %>%
+  ggplot() +
+  geom_sf(aes(color = class_f)) +
+  scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
+  labs(title = "San Diego River") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+sandiego_asci_map
+
+# South coast sites inset figures
+
+scoast <- (ventura_asci_map) /
+  (sanjuan_asci_map) /
+  (sandiego_asci_map)
+
+scoast
+
+# ggsave("asci_modeled_SCoast.png",
+#      path = "/Users/heilil/Desktop/R_figures",
+#      width = 20,
+#      height = 40,
 #      units = "cm"
 #    )
 
