@@ -15,6 +15,8 @@ library(skimr)
 library(sf)
 library(ggspatial)
 library(nhdplusTools)
+library(patchwork)
+library(Metrics)
 
 # Load datasets.
 # ASCI data available from SCCWRP database.
@@ -210,9 +212,12 @@ nottrain_prediction2 <- nottrain %>% # taking all COMIDS that haven't been used 
   na.omit() %>% # remove NAs
   mutate(asci_predicted = predict(myrf2, newdata = nottrain %>% na.omit())) # using developed model (myrf2), inputting predictor variables (nottrain - which contains COMIDs and associated StreamCat data) to predict output/dependent variable (asci_predicted a.k.a. ASCI).
 
-# rePredict ASCI scores for training data.
+# rePredict ASCI scores for training and testing data (to be used in validation below).
 mydf2_train2 <- mydf2_train
 mydf2_train2$asci_predicted <- predict(myrf2) # Adds column of predicted ASCI values to training dataset.
+
+mydf2_test2 <- mydf2_test %>%
+  mutate(asci_predicted = predict(myrf2, newdata = mydf2_test %>% select(-c(stationcode, asci, PSA6, Length_Fin)))) # Adds column of predicted ASCI values to testing dataset.
 
 # Creates new dataset of bound rows for both ...
 ca_predictions2 <- bind_rows(nottrain_prediction2 %>%
@@ -230,6 +235,9 @@ ca_predictions2 <- ca_predictions2 %>%
     asci_predicted < 0.93~"Possibly Altered",
     asci_predicted >= 0.93~"Likely Unaltered")) %>%
   mutate(class_f = factor(classification, levels = c("Very Likely Altered", "Likely Altered", "Possibly Altered", "Likely Unaltered"))) # relevel classifications
+
+# Export results.
+#write_csv(ca_predictions2, "asci_rf_results.csv")
 
 # Summary table by site #.
 ca_summary <- ca_predictions2 %>%
@@ -270,11 +278,88 @@ plot(myqrf) # plots the results.
 
 # Step Six - Model validation ---------------------------------------------
 
-# AUC values
+# Compare predicted vs. actual results, including by PSA region.
+# Adding lines of slope=1 to each plot.
+val1 <- ggplot(mydf2_train2, aes(x = asci_predicted, y = asci)) +
+  geom_point(color = "#2A3927") +
+  #xlim(0,1.3) +
+  #ylim(0, 1.3) +
+  labs(x = "ASCI predicted",
+    y = "ASCI measured",
+    title = "Training Data\nn=912") +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_bw()
 
-# Compare residuals by PSA region
+val1
 
-# Other model performance parameters
+val2 <- ggplot(mydf2_test2, aes(x = asci_predicted, y = asci)) +
+  geom_point(color = "#3793EC") +
+  #xlim(0,1.3) +
+  #ylim(0, 1.3) +
+  labs(x = "ASCI predicted",
+    y = "ASCI measured",
+    title = "Testing Data\nn=302") +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_bw()
+
+val2
+
+# Create the full testing + training dataset to plot together.
+mydf2_test2$set <- "Testing"
+mydf2_train2$set <- "Training"
+full_train_test <- bind_rows(mydf2_test2, mydf2_train2) %>%
+  mutate(set_f = factor(set, levels = c("Training", "Testing")))
+
+val3 <- ggplot(full_train_test, aes(x = asci_predicted, y = asci, color = set_f)) +
+  geom_point() +
+  scale_color_manual(name = "Set", values = c("#2A3927", "#3793EC"), drop = FALSE) +
+  #xlim(0,1.3) +
+  #ylim(0, 1.3) +
+  labs(x = "ASCI predicted",
+    y = "ASCI measured",
+    title = "All Data\nn=1,214") +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  facet_wrap(~PSA6, scales = "free") +
+  theme_bw()
+
+val3
+
+val_fig <- (val1 + val2) /
+  (val3)
+
+val_fig
+
+# ggsave("asci_rfmodel_validation.png",
+#      path = "/Users/heilil/Desktop/R_figures",
+#      width = 35,
+#      height = 25,
+#      units = "cm"
+#    )
+
+# Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical ouputs from random forest models -
+# Instead, calculated Root Mean Squared Error (RMSE) of both training and test datasets.
+# If test RMSE values are much greater than training, then possible the model has been over fit.
+
+predtest <- predict(myrf2, mydf2_test2)
+rmse(mydf2_test2$asci,predtest)
+# 0.15
+
+predtrain <- predict(myrf2, mydf2_train2)
+rmse(mydf2_train2$asci,predtrain)
+# 0.07
+
+# Double checking using the original random forest dataset (rf_dat) with all 35 possible variables included to see where the error in number of predictors starts to increase dramatically (to help double check our decision to include only 10 parameters).
+dc <- rfcv(rf_dat %>%
+    select(-asci), 
+  rf_dat$asci,
+  step = 0.7, # default is 0.5
+  scale="log")
+
+dc$error.cv
+#34         24         17         12          8          6          4          3          2          1 
+#0.02652713 0.02663084 0.02730246 0.02751125 0.02759022 0.02859096 0.03055676 0.03082433 0.03328643 0.04411923 
+
+# Appears between 34 and 8 variables, there is an insignificant increase in error.
 
 # Step Seven - Map results state-wide -------------------------------------
 
@@ -299,7 +384,7 @@ mcomid <- ca_predictions2$COMID
 
 # Filter by and plot only modeled stream reaches.
 
-model_test <- nhd_ca %>%
+modeled_asci_map <- nhd_ca %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
@@ -307,7 +392,7 @@ model_test <- nhd_ca %>%
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   theme_bw()
 
-model_test
+modeled_asci_map
 
 # ggsave("asci_modeled_CA.png",
 #      path = "/Users/heilil/Desktop/R_figures",
