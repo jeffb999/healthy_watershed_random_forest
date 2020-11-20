@@ -12,6 +12,9 @@ library(caret)
 library(tidyverse)
 library(tidymodels)
 library(skimr)
+library(sf)
+library(ggspatial)
+library(nhdplusTools)
 
 # Load datasets.
 # ASCI data available from SCCWRP database.
@@ -91,7 +94,7 @@ myrf <- randomForest(y = rf_dat$asci, # dependent variable
   ntrees = 500) # 500 trees. 
 
 myrf # examine the results.
-# 39.36% variance explained.
+# 39.69% variance explained.
 
 summary(myrf)
 # mtry allows you to parameterize the number of splits
@@ -242,7 +245,7 @@ ca_sum <- full_join(ca_summary, ca_summary_length)
 # write_csv(ca_sum, "rf_results_summary.csv")
 
 # Step Five - Quantile Regression model -----------------------------------
-# Note - for the Health Watersheds Project, I did not pursue this structure.
+# Note - for the Healthy Watersheds Project, I did not pursue this structure.
 # Quantile random forest regression mode, instead of looking at the mode of trees, can compare to 10th, 50th, 90th percentiles etc.
 
 # Need to make a new dataset taking the above results of pickVars into account.
@@ -265,7 +268,6 @@ predict(myqrf) # automatically presents 10th %tile, median, and 90th %tile
 plot(myqrf) # plots the results.
 # Again appears to improve after ~100 trees.
 
-
 # Step Six - Model validation ---------------------------------------------
 
 # AUC values
@@ -276,7 +278,43 @@ plot(myqrf) # plots the results.
 
 # Step Seven - Map results state-wide -------------------------------------
 
+# Using ca_predictions2 dataset generated above. But need to first associate lat/lon with each COMID.
 
+# Load in NHD_Plus_CA dataset from Annie.
+
+nhd_ca <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Plus_CA/NHDPlus_V2_FLowline_CA.shp") %>%
+  mutate(COMID = as.numeric(COMID))
+
+# Filter and plot one COMID to make sure it works.
+
+nhd_test <- nhd_ca %>%
+  filter(COMID == 10004994)
+
+fig_test <- ggplot(nhd_test) + geom_sf(color = "black")
+
+fig_test
+
+# Assign modeled COMIDs to mcomid.
+mcomid <- ca_predictions2$COMID
+
+# Filter by and plot only modeled stream reaches.
+
+model_test <- nhd_ca %>%
+  filter(COMID %in% mcomid) %>%
+  inner_join(ca_predictions2) %>%
+  ggplot() +
+  geom_sf(aes(color = class_f)) +
+  scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
+  theme_bw()
+
+model_test
+
+# ggsave("asci_modeled_CA.png",
+#      path = "/Users/heilil/Desktop/R_figures",
+#      width = 35,
+#      height = 35,
+#      units = "cm"
+#    )
 
 # Additional Notes - Healthy Watersheds project ---------------------------
 
@@ -294,5 +332,9 @@ plot(myqrf) # plots the results.
 # Likely unaltered: q50 >= 0.93
 
 # Condition approach favored by Anna per meeting on 11/3/2020.
+
+# Works Cited:
+
+# Hill, Ryan A., Marc H. Weber, Scott G. Leibowitz, Anthony R. Olsen, and Darren J. Thornbrugh, 2016. The Stream-Catchment (StreamCat) Dataset: A Database of Watershed Metrics for the Conterminous United States. Journal of the American Water Resources Association (JAWRA) 52:120-128. DOI: 10.1111/1752-1688.12372.
 
 # End of R script.
