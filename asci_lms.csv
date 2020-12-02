@@ -1,0 +1,15 @@
+﻿Region,Dataset,R2,Slope,Slope_p,Intercept,Intercept_p
+Statewide,Training,0.3977,0.9698,< 0.0001,0.0259,0.429
+Statewide,Testing,0.4311,0.95643,< 0.0001,0.03309,0.526
+Central_Valley,Training,0.01544,0.4086,0.205,0.5082,0.0373
+Central_Valley,Testing,-0.04896,0.0753,0.89,0.7037,0.1
+Chaparral,Training,0.2828,0.7914,< 0.0001,0.1569,0.0306
+Chaparral,Testing,0.2827,0.8803,< 0.0001,0.1104,0.436
+Deserts_Modoc,Training,0.0004049,0.286,0.31563,0.6638,0.00954
+Deserts_Modoc,Testing,0.007172,-0.5414,0.3131,1.4027,0.0101
+North_Coast,Training,0.1831,0.8698,< 0.0001,0.135,0.39
+North_Coast,Testing,0.06218,0.5104,0.0804,0.4553,0.0881
+Sierra,Training,0.02761,0.4333,0.02143,0.5317,0.00208
+Sierra,Testing,0.2855,1.10756,< 0.0001,-0.09556,0.655
+South_Coast,Training,0.4534,1.03173,< 0.0001,-0.04264,0.368
+South_Coast,Testing,0.4808,0.9711334,< 0.0001,0.0006784,0.992

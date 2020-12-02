@@ -17,6 +17,7 @@ library(ggspatial)
 library(nhdplusTools)
 library(patchwork)
 library(Metrics)
+library(gt)
 
 # Load datasets.
 # ASCI data available from SCCWRP database.
@@ -174,7 +175,7 @@ pickVars(my_rfe$variables, size = my_size)
 # pickVars (10): RdCrsWs, PctImp2011Ws, PctAgWs, PctUrbWsRp100, PctImp2011WsRp100,
 # PctUrbWs, RdDensWs, DamDensWs, RdDensWsRp100, RdDensCatRp100
 
-# Proceed with a regular RF that yields median values and fit those into the following classification scheme:
+# Proceed with a regular RF that yields mean weighted values and fit those into the following classification scheme:
 
 #Likely condition approach: Compare q50 to three ASCI thresholds (0.67, 0.82, 0.93) @ reference sites (1st, 10th, 30th percentiles)
 # Very likely altered: q50 < 0.67
@@ -202,8 +203,40 @@ summary(myrf2)
 plot(myrf2) # need min of 100 trees.
 varImpPlot(myrf2)
 
-importance2 <- myrf2$importance
+importance2 <- as.data.frame(as.table(myrf2$importance))
 View(importance2) # displays the data plotted in the plot above
+
+# Nicer ggplot variable importance plot.
+vip_plot_a <- importance2 %>%
+  filter(Var2 == "%IncMSE") %>%
+  mutate(Var1 = factor(Var1)) %>%
+  mutate(Var1_f = fct_reorder(Var1, Freq)) %>%
+  ggplot(aes(x = Freq, y = Var1_f)) +
+  geom_point(size = 3, alpha = 0.75) +
+  labs(x = "% Importance (MSE)",
+    y = "Variables") +
+  theme_bw()
+
+vip_plot_b <- importance2 %>%
+  filter(Var2 == "IncNodePurity") %>%
+  mutate(Var1 = factor(Var1)) %>%
+  mutate(Var1_f = fct_reorder(Var1, Freq)) %>%
+  ggplot(aes(x = Freq, y = Var1_f)) +
+  geom_point(size = 3, alpha = 0.75) +
+  labs(x = "Node Purity",
+    y = "Variables") +
+  theme_bw()
+
+vip_plot <- vip_plot_a + vip_plot_b
+
+vip_plot
+
+# ggsave("asci_vip_plot.png",
+#      path = "/Users/heilil/Desktop/R_figures",
+#      width = 25,
+#      height = 10,
+#      units = "cm"
+#    )
 
 predict(myrf2) # returns out of bag predictions for training data
 
@@ -236,6 +269,7 @@ ca_predictions2 <- ca_predictions2 %>%
     asci_predicted >= 0.93~"Likely Unaltered")) %>%
   mutate(class_f = factor(classification, levels = c("Very Likely Altered", "Likely Altered", "Possibly Altered", "Likely Unaltered"))) # relevel classifications
 
+#### Results .csv ####
 # Export results.
 #write_csv(ca_predictions2, "asci_rf_results.csv")
 
@@ -279,11 +313,10 @@ plot(myqrf) # plots the results.
 # Step Six - Model validation ---------------------------------------------
 
 # Compare predicted vs. actual results, including by PSA region.
-# Adding lines of slope=1 to each plot.
+# Adding lines of slope=1 and linear models to each plot.
 val1 <- ggplot(mydf2_train2, aes(x = asci_predicted, y = asci)) +
-  geom_point(color = "#2A3927") +
-  #xlim(0,1.3) +
-  #ylim(0, 1.3) +
+  geom_point(color = "#2A3927", alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "#2A3927") +
   labs(x = "ASCI predicted",
     y = "ASCI measured",
     title = "Training Data\nn=912") +
@@ -292,10 +325,13 @@ val1 <- ggplot(mydf2_train2, aes(x = asci_predicted, y = asci)) +
 
 val1
 
+lm1 <- lm(asci~asci_predicted, data = mydf2_train2)
+summary(lm1)
+
 val2 <- ggplot(mydf2_test2, aes(x = asci_predicted, y = asci)) +
-  geom_point(color = "#3793EC") +
-  #xlim(0,1.3) +
-  #ylim(0, 1.3) +
+  geom_point(color = "#3793EC", alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "#3793EC") +
+  scale_x_continuous(breaks = c(0.5, 0.7, 0.9)) +
   labs(x = "ASCI predicted",
     y = "ASCI measured",
     title = "Testing Data\nn=302") +
@@ -304,6 +340,9 @@ val2 <- ggplot(mydf2_test2, aes(x = asci_predicted, y = asci)) +
 
 val2
 
+lm2 <- lm(asci~asci_predicted, data = mydf2_test2)
+summary(lm2)
+
 # Create the full testing + training dataset to plot together.
 mydf2_test2$set <- "Testing"
 mydf2_train2$set <- "Training"
@@ -311,7 +350,8 @@ full_train_test <- bind_rows(mydf2_test2, mydf2_train2) %>%
   mutate(set_f = factor(set, levels = c("Training", "Testing")))
 
 val3 <- ggplot(full_train_test, aes(x = asci_predicted, y = asci, color = set_f)) +
-  geom_point() +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
   scale_color_manual(name = "Set", values = c("#2A3927", "#3793EC"), drop = FALSE) +
   #xlim(0,1.3) +
   #ylim(0, 1.3) +
@@ -319,7 +359,7 @@ val3 <- ggplot(full_train_test, aes(x = asci_predicted, y = asci, color = set_f)
     y = "ASCI measured",
     title = "All Data\nn=1,214") +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  facet_wrap(~PSA6, scales = "free") +
+  facet_wrap(~PSA6) +
   theme_bw()
 
 val3
@@ -327,14 +367,101 @@ val3
 val_fig <- (val1 + val2) /
   (val3)
 
-val_fig
+val_fig + plot_annotation(
+  title = 'ASCI Random Forest Results',
+  subtitle = 'All modeling performed using StreamCAT datasets.',
+  caption = 'Linear models are colored according to dataset. Lines of slope = 1 are denoted in black.'
+)
 
+# Save figure.
 # ggsave("asci_rfmodel_validation.png",
 #      path = "/Users/heilil/Desktop/R_figures",
 #      width = 35,
 #      height = 25,
 #      units = "cm"
 #    )
+
+lm3 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Central_Valley") %>%
+    filter(set_f == "Training"))
+
+lm4 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Central_Valley") %>%
+    filter(set_f == "Testing"))
+
+lm5 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Chaparral") %>%
+    filter(set_f == "Training"))
+
+lm6 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Chaparral") %>%
+    filter(set_f == "Testing"))
+
+lm7 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Deserts_Modoc") %>%
+    filter(set_f == "Training"))
+
+lm8 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Deserts_Modoc") %>%
+    filter(set_f == "Testing"))
+
+lm9 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "North_Coast") %>%
+    filter(set_f == "Training"))
+
+lm10 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "North_Coast") %>%
+    filter(set_f == "Testing"))
+
+lm11 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Sierra") %>%
+    filter(set_f == "Training"))
+
+lm12 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "Sierra") %>%
+    filter(set_f == "Testing"))
+
+lm13 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "South_Coast") %>%
+    filter(set_f == "Training"))
+
+lm14 <- lm(asci~asci_predicted, 
+  data = full_train_test %>%
+    filter(PSA6 == "South_Coast") %>%
+    filter(set_f == "Testing"))
+
+# Import the results of these linear models to generate summary table.
+
+asci_lms <- read_csv("asci_lms.csv")
+
+summary_table <- asci_lms %>%
+  gt(groupname_col = "Region", rowname_col = "Dataset") %>%
+  fmt_number(columns = vars(R2, Slope, Intercept, Intercept_p), decimals = 4) %>%
+  tab_header(title = "ASCI Results Validation",
+    subtitle = "All modeling performed using StreamCAT datasets.") %>%
+  cols_label(R2 = html("R<sup>2</sup"),
+    Slope_p = html("<i>p</i>"),
+    Intercept_p = html("<i>p</i>")) %>%
+  cols_align(
+    align = "left",
+    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p))
+summary_table
+
+# Save table.
+# gtsave(summary_table,
+#   "asci_rfmodel_lms.png",
+#   path = "/Users/heilil/Desktop/R_figures")
 
 # Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical ouputs from random forest models -
 # Instead, calculated Root Mean Squared Error (RMSE) of both training and test datasets.
