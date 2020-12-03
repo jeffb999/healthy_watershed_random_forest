@@ -547,10 +547,17 @@ ventura_asci_map <- nhd_vr %>%
   geom_sf(aes(color = class_f)) +
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "Ventura River") +
-  theme_bw() +
-  theme(legend.position = "none")
+  theme_bw() #+
+  #theme(legend.position = "none")
 
 ventura_asci_map
+
+# ggsave("asci_modeled_Ventura.png",
+#      path = "/Users/heilil/Desktop/R_figures",
+#      width = 15,
+#      height = 15,
+#      units = "cm"
+#    )
 
 # San Juan Creek inset
 
