@@ -13,6 +13,7 @@ library(ggspatial)
 library(nhdplusTools)
 library(patchwork)
 library(Metrics)
+library(leaflet)
 
 # Load datasets.
 asci_stations <- read_csv("asci_stations.csv") # Loads ASCI analysis table merged with lustations datasets from the SMC database.
@@ -152,5 +153,37 @@ both_protect_map
 #      height = 35,
 #      units = "cm"
 #    )
+
+# Code to generate map of San Gabriel watershed stream reaches.
+
+lu <- read_csv("lu_stations_prob.csv") # Reads in lu_stations table that's been filtered to include only probabilistic/SMC sites.
+
+gis <- read_csv("gis_metrics_trim.csv") # Reads in gis_metrics table that's been filtered only for the station identifier crosswalk (stationcode - masterid - COMID).
+
+sgsites <- lu %>%
+  filter(smcshed == "San Gabriel") %>%
+  left_join(gis, by = "masterid")
+
+sgdat<- sgsites %>%
+  filter(stationcode %in% c("SMC00428", "SMC00544", "405CE0280", "SMC00480", "SMC04000", "SGUT502", "SGUR00144", "SMC06496", "SMC00144"))
+
+sgdat_sf <- st_as_sf(sgdat,
+  coords = c("longitude", "latitude"), # note we put lon (or X) first!
+  remove = F, # don't remove lat/lon cols from the dataframe
+  crs = 7131) %>% # add projection (this is NAD83)
+  mutate(stressors = c(1, 3, 3, 0, 1, 4))
+
+# Map with sampling sites as points.
+
+PointUsePalette <- colorFactor(palette = c("blue", "lightskyblue", "red", "palegreen"),
+  domain = c(0, 1, 3, 4))
+
+leaflet(sgdat_sf) %>% 
+  addTiles() %>%
+  addCircleMarkers(
+    color = ~PointUsePalette(stressors),
+    stroke = TRUE, 
+    fillOpacity = 0.75
+  )
 
 # End of script.
