@@ -463,7 +463,7 @@ summary_table
 #   "asci_rfmodel_lms.png",
 #   path = "/Users/heilil/Desktop/R_figures")
 
-# Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical ouputs from random forest models -
+# Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical outputs from random forest models -
 # Instead, calculated Root Mean Squared Error (RMSE) of both training and test datasets.
 # If test RMSE values are much greater than training, then possible the model has been over fit.
 

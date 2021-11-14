@@ -140,10 +140,11 @@ ca_predictions <- bind_rows(nottrain_prediction %>%
 # This creates the dataset that will be plotted (i.e. you're trying to create a state-wide plot of predicted CSCI scores).
 
 # Plot the data.
-rf_plot1 <- ggplot(ca_predictions, aes(x = RdCrsWs, y = csci_predicted)) +
+rf_plot1 <- ggplot(ca_predictions, aes(x = PctImp2011Cat, y = csci_predicted)) +
   geom_point(alpha = 0.1) +
-  labs(x = "Watershed Density of Road-Stream Intersections",
+  labs(x = "Percent Impervious Land Cover in Stream Catchment",
     y = "Predicted CSCI Score") +
+  #xlim(0,25) +
   theme_classic() +
   facet_wrap(.~Set)
 
