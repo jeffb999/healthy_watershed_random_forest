@@ -293,7 +293,7 @@ ca_predictions2 <- ca_predictions2 %>%
 
 #### Results .csv ####
 # Export results.
-# write_csv(ca_predictions2, "data_model_outputs/asci_rf_results_V2.csv")
+write_csv(ca_predictions2, "data_model_outputs/asci_rf_results_V2.csv")
 # This is a large file, so GitHub may protest a bit when pushing, but it's under the 100MB file size limit.
 
 # Summary table by site #.
