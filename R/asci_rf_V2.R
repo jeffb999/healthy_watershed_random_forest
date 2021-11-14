@@ -402,6 +402,9 @@ val_fig + plot_annotation(tag_levels = 'A')
 #      units = "cm"
 #    )
 
+# Generate summary table of linear models for the figures above.
+# Note to future self: make this a for loop
+
 lm3 <- lm(asci~asci_predicted, 
   data = full_train_test %>%
     filter(PSA6 == "Central_Valley") %>%
@@ -546,7 +549,6 @@ Pval14     <- summary(lm14)$coefficients[2,4] # get p-value also anova(lm14)$'Pr
 Int14      <- lm14$coefficients[1] # get the y-intercept
 PInt14     <- summary(lm14)$coefficients[1,4] # get the Intercept p-value
 
-
 asci_lms <- data.frame("Region" = c("Statewide", "Statewide", "Central_Valley", "Central_Valley", "Chaparral", "Chaparral", "Deserts_Modoc", "Deserts_Modoc", "North_Coast", "North_Coast", "Sierra", "Sierra", "South_Coast", "South_Coast"),
                        "Dataset" = c("Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing"),
                        "R2" = c(Rsq1, Rsq2, Rsq3, Rsq4, Rsq5, Rsq6, Rsq7, Rsq8, Rsq9, Rsq10, Rsq11, Rsq12, Rsq13, Rsq14),
@@ -554,61 +556,33 @@ asci_lms <- data.frame("Region" = c("Statewide", "Statewide", "Central_Valley", 
                        "Slope_p" = c(Pval1, Pval2, Pval3, Pval4, Pval5, Pval6, Pval7, Pval8, Pval9, Pval10, Pval11, Pval12, Pval13, Pval14),
                        "Intercept" = c(Int1, Int2, Int3, Int4, Int5, Int6, Int7, Int8, Int9, Int10, Int11, Int12, Int13, Int14),
                        "Intercept_p" = c(PInt1, PInt2, PInt3, PInt4, PInt5, PInt6, PInt7, PInt8, PInt9, PInt10, PInt11, PInt12, PInt13, PInt14))
+
 asci_lms <- asci_lms %>%
   mutate(Slope_p = round(Slope_p, digits=6)) %>%
   mutate(Slope_p = ifelse(Slope_p < 0.0001, "<0.0001", Slope_p))
-#write_csv(asci_lms,"L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci.lms.csv" )
 
-# # Import the results of these linear models to generate summary table.
-# 
-# asci_lms <- read_csv(L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_lms.csv")
-#asci_lms <- read_csv("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/asci_lms.csv")
+# Export linear model results.
+write_csv(asci_lms,"data_model_outputs/asci_lms_V2.csv" )
 
 # Run the code and save table to a png file: 
-summary_table <- asci_lms %>%
+(summary_table <- asci_lms %>%
   gt(groupname_col = "Region", rowname_col = "Dataset") %>%
   fmt_number(columns = vars(R2, Slope, Intercept, Intercept_p), decimals = 4) %>%
-  tab_header(title = "asci Results Validation",
+  tab_header(title = "ASCI Results Validation",
              subtitle = "All modeling performed using StreamCAT datasets.") %>%
   cols_label(R2 = html("R<sup>2</sup"),
              Slope_p = html("<i>p</i>"),
              Intercept_p = html("<i>p</i>")) %>%
   cols_align(
     align = "left",
-    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p))
-
-summary_table
+    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p)))
 
 # Save table.
-# gtsave(summary_table,
-#   "asci_rfmodel_lms.png",
-#   path = "/Users/heilil/Desktop/R_figures")
+gtsave(summary_table,
+  "asci_rfmodel_lms.png",
+  path = "figures")
 
-
-#webshot::install_phantomjs()
-summary_table <- asci_lms %>%
-  gt(groupname_col = "Region", rowname_col = "Dataset") %>%
-  fmt_number(columns = vars(R2, Slope, Intercept, Intercept_p), decimals = 4) %>%
-  tab_header(title = "asci Results Validation",
-             subtitle = "All modeling performed using StreamCAT datasets.") %>%
-  cols_label(R2 = html("R<sup>2</sup"),
-             Slope_p = html("<i>p</i>"),
-             Intercept_p = html("<i>p</i>")) %>%
-  cols_align(
-    align = "left",
-    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p)) %>%
-  gtsave(
-    "asci_rfmodel_lms.png",
-    path = "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds"
-  )
-# 
-
-# gtsave(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_rfmodel_lms.png")
-
-# png("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_rfmodel_lms.png")
-# summary_table
-# dev.off()
-
+# Creating overall process summary table.
 process_summary <- data.frame("Dataframe" = c("ca", "ca_predictions", "ca_predictions2", "full_train_test", "mydf", "mydf2",
                                               "mydf2_test", "mydf2_test2", "mydf2_train", "mydf2_train2", "nottrain",
                                               "nottrain_prediction", "nottrain_prediction2", "ps6", "rf_dat", "rf_dat2"),
@@ -616,23 +590,23 @@ process_summary <- data.frame("Dataframe" = c("ca", "ca_predictions", "ca_predic
                                           nrow(mydf2), nrow(mydf2_test), nrow(mydf2_test2), nrow(mydf2_train), nrow(mydf2_train2),
                                           nrow(nottrain), nrow(nottrain_prediction), nrow(nottrain_prediction2), nrow(ps6),
                                           nrow(rf_dat), nrow(rf_dat2)))
-#write.csv(process_summary, "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_process_summary.csv")
 
-
+# Export data
+write_csv(process_summary, "data_model_outputs/asci_process_summary_V2.csv")
 
 # Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical ouputs from random forest models -
 # Instead, calculated Root Mean Squared Error (RMSE) of both training and test datasets.
-# If test RMSE values are much greater than training, then possible the model has been over fit.
+# If test RMSEs are much greater than training, then possible the model has been over fit.
 
 predtest <- predict(myrf2, mydf2_test2)
 rmse(mydf2_test2$asci,predtest)
-# 0.16
+# 0.17
 
 predtrain <- predict(myrf2, mydf2_train2)
 rmse(mydf2_train2$asci,predtrain)
 # 0.07
 
-# Double checking using the original random forest dataset (rf_dat) with all 35 possible variables included to see where the error in number of predictors starts to increase dramatically (to help double check our decision to include only 10 parameters).
+# Double checking using the original random forest dataset (rf_dat) with all 35 possible variables included to see where the error in number of predictors starts to increase dramatically (to help double check our decision to include only 15 parameters).
 dc <- rfcv(rf_dat %>%
     select(-asci), 
   rf_dat$asci,
@@ -640,36 +614,37 @@ dc <- rfcv(rf_dat %>%
   scale="log")
 
 dc$error.cv
-# Heili's values.  Could be old???
-#34         24         17         12          8          6          4          3          2          1 
-#0.02652713 0.02663084 0.02730246 0.02751125 0.02759022 0.02859096 0.03055676 0.03082433 0.03328643 0.04411923 
-# Results from analysis 3/25/2021:
-#34         24         17         12          8          6          4          3          2          1 
-#0.02695186 0.02699970 0.02711950 0.02753817 0.02912119 0.02941228 0.03143711 0.03062278 0.03381303 0.04775756 
 
+#        34         24         17         12          8          6          4          3 
+# 0.02626878 0.02633476 0.02626836 0.02703005 0.02813826 0.02922833 0.03031661 0.03056587 
+# 2          1 
+# 0.03271604 0.04080985 
 
-# Appears between 34 and 8 variables, there is an insignificant increase in error.
+# Appears between 34 and 6 variables, there is an insignificant increase in error.
 
 # Step Seven - Map results state-wide -------------------------------------
 
-# Using ca_predictions2 dataset generated above. But need to first associate lat/lon with each COMID.
+# Please note, the spatial datasets used to create the final maps are not available
+# on GitHub due to their size.
+# All figures created and exported have also been mapped to the SCCWRP server rather 
+# than this repository's directory.
+# If you would like access to these datasets, please contact Jeff Brown (jeffb@sccwrp.org).
+
+# Using ca_predictions2 dataset generated above. 
+# But need to first associate lat/lon with each COMID.
 
 # Load in NHD_Plus_CA dataset from Annie as well as watersheds from Jeff.
 # Full state of California
-#nhd_ca <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Plus_CA/NHDPlus_V2_FLowline_CA.shp") %>%
 nhd_ca <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/NHDPlus_NAD83.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
 # South Coast watersheds - Ventura River, San Juan Creek, San Diego River
-#nhd_vr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/VenturaRiver_NHD_Clip.shp") %>%
 nhd_vr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/VenturaRiver_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
-#nhd_sjc <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanJuanCreek_NHD_Clip.shp") %>%
 nhd_sjc <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanJuanCreek_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
-#nhd_sdr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanDiegoRiver_NHD_Clip.shp") %>%
 nhd_sdr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanDiegoRiver_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
@@ -678,39 +653,13 @@ nhd_sdr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanDiegoRiver_NHD_Clip.sh
 nhd_test <- nhd_ca %>%
   filter(COMID == 10004994)
 
-fig_test <- ggplot(nhd_test) + geom_sf(color = "black")
-
-fig_test
+(fig_test <- ggplot(nhd_test) + geom_sf(color = "black"))
 
 # Assign modeled COMIDs to mcomid.
 mcomid <- ca_predictions2$COMID
 
 # Filter by and plot only modeled stream reaches.
-
-# # Statewide map. 3 thresholds & 4 categories
-# modeled_asci_map <- nhd_ca %>%
-#   filter(COMID %in% mcomid) %>%
-#   inner_join(ca_predictions2) %>%
-#   ggplot() +
-#   geom_sf(aes(color = class_f)) +
-#   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
-#   theme_bw()
-# 
-# modeled_asci_map
-
-# png(file="asci_modeled_CA.png", units="in", width=8, height=5, res=300)
-# png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_CA_Theroux.png", units="in", width=8, height=5, res=300)
-# modeled_asci_map
-# dev.off()
-
-# ggsave("asci_modeled_CA.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 35,
-#      height = 35,
-#      units = "cm"
-#    )
-
-# Statewide map. 3 thresholds & 4 categories
+# Statewide map. 1 threshold & 2 categories
 modeled_asci_map <- nhd_ca %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
@@ -719,40 +668,29 @@ modeled_asci_map <- nhd_ca %>%
   scale_color_manual(name = "Condition", values = c("red2", "steelblue"), drop = FALSE) +
   theme_bw()
 modeled_asci_map
+
 # png(file="asci_modeled_CA.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_CA_Theroux_2.png", units="in", width=8, height=5, res=300)
 # modeled_asci_map
 # dev.off()
 
 # Ventura River inset
-
-ventura_asci_map <- nhd_vr %>%
+(ventura_asci_map <- nhd_vr %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
   geom_sf(aes(color = class_f)) +
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "Ventura River") +
-  theme_bw() #+
-  #theme(legend.position = "none")
-
-ventura_asci_map
+  theme_bw())
 
 # png(file="asci_modeled_Ventura.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_Ventura_Theroux.png", units="in", width=8, height=5, res=300)
 # ventura_asci_map
 # dev.off()
 
-# ggsave("asci_modeled_Ventura.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 15,
-#      height = 15,
-#      units = "cm"
-#    )
-
 # San Juan Creek inset
-
-sanjuan_asci_map <- nhd_sjc %>%
+(sanjuan_asci_map <- nhd_sjc %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
@@ -760,9 +698,7 @@ sanjuan_asci_map <- nhd_sjc %>%
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "San Juan Creek") +
   theme_bw() +
-  theme(legend.position = "none")
-
-sanjuan_asci_map
+  theme(legend.position = "none"))
 
 # png(file="asci_modeled_SanJuanCreek.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_SanJuanCreek_Theroux.png", units="in", width=8, height=5, res=300)
@@ -770,8 +706,7 @@ sanjuan_asci_map
 # dev.off()
 
 # San Diego River inset
-
-sandiego_asci_map <- nhd_sdr %>%
+(sandiego_asci_map <- nhd_sdr %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
@@ -779,9 +714,7 @@ sandiego_asci_map <- nhd_sdr %>%
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "San Diego River") +
   theme_bw() +
-  theme(legend.position = "none")
-
-sandiego_asci_map
+  theme(legend.position = "none"))
 
 # png(file="asci_modeled_SanDiegoRiver.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_SanDiegoRiver_Theroux.png", units="in", width=8, height=5, res=300)
@@ -789,7 +722,6 @@ sandiego_asci_map
 # dev.off()
 
 # South coast sites inset figures
-
 scoast <- (ventura_asci_map) /
   (sanjuan_asci_map) /
   (sandiego_asci_map)
@@ -800,13 +732,6 @@ scoast
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_modeled_SouthCoast_Theroux.png", units="in", width=8, height=5, res=300)
 # scoast
 # dev.off()
-
-# ggsave("asci_modeled_SCoast.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 20,
-#      height = 40,
-#      units = "cm"
-#    )
 
 # Additional Notes - Healthy Watersheds project ---------------------------
 
@@ -823,13 +748,12 @@ scoast
 # Possibly altered: q50 < 0.93
 # Likely unaltered: q50 >= 0.93
 
-# Condition approach favored by Anna per meeting on 11/3/2020.
+# Condition approach favored per meeting on 11/3/2020.
 
 # Works Cited:
 
 # Hill, Ryan A., Marc H. Weber, Scott G. Leibowitz, Anthony R. Olsen, and Darren J. Thornbrugh, 2016. The Stream-Catchment (StreamCat) Dataset: A Database of Watershed Metrics for the Conterminous United States. Journal of the American Water Resources Association (JAWRA) 52:120-128. DOI: 10.1111/1752-1688.12372.
-#
-# Theroux,S , RD Mazora, MW Beck, PR Ode, ED Stein, M Sutula. 2020. Predictive biological indices for algae populations in diverse stream environments. Ecological Indicators 119 (2020) 106421
 
+# Theroux, S, RD Mazor, MW Beck, PR Ode, ED Stein, M Sutula. 2020. Predictive biological indices for algae populations in diverse stream environments. Ecological Indicators 119 (2020) 106421
 
 # End of R script.
