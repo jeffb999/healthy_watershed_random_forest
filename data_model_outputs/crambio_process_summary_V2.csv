@@ -1,0 +1,17 @@
+Dataframe,Count
+ca,140710
+ca_predictions,138608
+ca_predictions2,138608
+full_train_test,815
+mydf,1176
+mydf2,815
+mydf2_test,205
+mydf2_test2,205
+mydf2_train,610
+mydf2_train2,610
+nottrain,140100
+nottrain_prediction,137998
+nottrain_prediction2,137998
+ps6,165807
+rf_dat,610
+rf_dat2,610
