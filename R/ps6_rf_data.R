@@ -2,6 +2,8 @@
 # Heili Lowman
 # October 22, 2020
 
+# The following code tidies the raw dataset downloaded from the Southern California Coastal Water Research Project server into a clean, consolidated file for use in the rf scripts in the remainder of this repository.
+
 # Again, the dataset pulled in below will not be posted to GitHub, because the file is too large to store on GitHub.
 
 #### PACKAGES ####
@@ -30,7 +32,7 @@ asci_ps6_params <- inner_join(ps61, ps62)
 
 #### DATA EXPORT ####
 
-write_csv(asci_ps6_params, "ps6_params.csv")
+write_csv(asci_ps6_params, "data_working/ps6_params.csv")
 
 # End of R script.
 

@@ -2,6 +2,8 @@
 # Heili Lowman
 # October 21, 2020
 
+# The following code combines the raw datasets downloaded from the StreamCat website into a single consolidated file for use in the rf scripts in the remainder of this repository.
+
 # The data used below will not be posted to GitHub, because the files are too large to store on GitHub. Instead, I'll use file paths to direct to my personal machine to retrieve them.
 
 #### PACKAGES ####
@@ -126,6 +128,6 @@ asci_streamcat_params <- full_join(L, rdstream1)
 
 #### DATA EXPORT ####
 
-write_csv(asci_streamcat_params, "streamcat_params.csv")
+write_csv(asci_streamcat_params, "data_working/streamcat_params.csv")
 
 # End of R script.
