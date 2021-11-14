@@ -1,11 +1,10 @@
-# ASCI Random Forest Draft
-# October 21, 2020
-# Heili Lowman
+# ASCI Random Forest Script
+# Revised: November 14, 2021
+# Heili Lowman, Jeff Brown
 
 # The following script will walk through a random forest created to predict state-wide ASCI scores, with datasets from SMC and StreamCat databases. The dependent variable in this case will be the Algal Stream Condition Index (ASCI) state-wide.
 
 # Step One - Load In ------------------------------------------------------
-setwd("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/")             # saved locally
 
 # Load packages.
 library(quantregForest)
@@ -19,21 +18,22 @@ library(nhdplusTools)
 library(patchwork)
 library(Metrics)
 library(gt)
+library(here)
 
 # Load datasets.
 # ASCI data available from SCCWRP database.
-asci_df <- read_csv("asci_rf_data2.csv") %>% # Loads in dataset pulled on 10/28/20.
+asci_df <- read_csv("data_raw/asci_rf_data2.csv") %>% # Loads in dataset pulled on 10/28/20.
   rename(COMID = comid) %>%
   drop_na(asci) # Drop the NA values.
 skim(asci_df) # Examine the dataset.
 str(asci_df)
 
 # Watershed characteristics' data available from StreamCat.
-ca <- read_csv("streamcat_params.csv")
+ca <- read_csv("data_working/streamcat_params.csv")
 skim(ca)
 str(ca) # Checking to be sure COMID is numeric in both datasets.
 # Perennial stream assessment data available from SCCWRP server.
-ps6 <- read_csv("ps6_params.csv")
+ps6 <- read_csv("data_working/ps6_params.csv")
 # In the ps6_rf_data script, if there are multiple Length_Fin measures for a given COMID, I have chosen the maximum of them and the associated PSA6 designation with that maximum.
 
 # Bind the datasets together.
@@ -69,14 +69,17 @@ mydf2_split <- mydf2 %>%
 # Pulls from training and testing sets created by initial_split()
 mydf2_train <- training(mydf2_split)
 mydf2_test <- testing(mydf2_split)
-# Examine the environment to be sure # of observations looks like the 75/25 split. 912:303.
+# Examine the environment to be sure # of observations looks like the 75/25 split. 909:305.
 
 # Create a separate dataset of available COMIDS that were not used in the training dataset.
 nottrain <- ca %>% # all COMIDS from StreamCat data, sampled or not
   filter(!COMID %in% mydf2_train$COMID) # Removing sites used to train the model. n = 139798
 
 # Step Three - Kitchen Sink model -----------------------------------------
-#RDM: Create a vector of variables used by marcus to create the scape tool
+# Will walk through all steps of the protocol for the "kitchen sink" model
+# but variable selection begins in Step Four below.
+
+# Create a vector of variables used by Marcus Beck to create the scape tool
 SCAPE_varz<-c("CanalDensCat","CanalDensWs", "PctImp2011Cat", "PctImp2011Ws", "PctImp2011CatRp100", "PctImp2011WsRp100", "PctUrbCat","PctUrbWs","PctAgCat","PctAgWs", "PctUrbCatRp100","PctUrbWsRp100","PctAgCatRp100","PctAgWsRp100", "RdDensCat","RdDensWs","RdDensCatRp100","RdDensWsRp100", "RdCrsCat","RdCrsWs")
 
 # Create finalized training dataset and include all possible variables. 
@@ -98,13 +101,13 @@ myrf <- randomForest(y = rf_dat$asci, # dependent variable
   ntrees = 500) # 500 trees. 
 
 myrf # examine the results.
-# 39.69% variance explained.
+# 40.94% variance explained.
 
 summary(myrf)
 # mtry allows you to parameterize the number of splits
 
 plot(myrf)
-# model performance appears to improve most at ~125 trees
+# model performance appears to improve most at ~100 trees
 
 varImpPlot(myrf)
 # displays which variables are most important
@@ -140,14 +143,12 @@ ca_predictions <- bind_rows(nottrain_prediction %>%
 # This creates the dataset that will be plotted (i.e. you're trying to create a state-wide plot of predicted ASCI scores).
 
 # Plot the data.
-rf_plot1 <- ggplot(ca_predictions, aes(x = RdCrsWs, y = asci_predicted)) +
+(rf_plot1 <- ggplot(ca_predictions, aes(x = RdCrsWs, y = asci_predicted)) +
   geom_point(alpha = 0.1) +
   labs(x = "Watershed Density of Road-Stream Intersections",
     y = "Predicted ASCI Score") +
   theme_classic() +
-  facet_wrap(.~Set)
-
-rf_plot1
+  facet_wrap(.~Set))
 
 # Step Four - Predictor Selection -----------------------------------------
 
@@ -163,7 +164,8 @@ my_ctrl <- rfeControl(functions = rfFuncs,
 set.seed(22)
 my_rfe <- rfe(y = rf_dat$asci, # set dependent variable
               x = rf_dat %>% select(-asci), # set predictor variables
-              size = c(3:10, 15, 20, 25, 30), # sets how many variables are in the overall model - I have 34 total possible variables.
+              size = c(3:10, 15, 20, 25, 30), # sets how many variables are in the overall model
+              # 34 total possible variables.
               rfeControl = my_ctrl) # pull in control from above
 
 # can you make your model even simpler?
@@ -173,23 +175,24 @@ my_size <- pickSizeTolerance(my_rfe$results, metric = "RMSE", tol = 1, maximize 
 # lower tol (~1) gives you more variables - "I'm taking the simplest model that's within 1% of the best model."
 pickVars(my_rfe$variables, size = my_size)
 
-# pickVars (10): RdCrsWs, PctImp2011Ws, PctAgWs, PctUrbWsRp100, PctImp2011WsRp100,
-# PctUrbWs, RdDensWs, DamDensWs, RdDensWsRp100, RdDensCatRp100
+# pickVars (15): "PctImp2011Ws"   "RdCrsWs"         "PctImp2011WsRp100"  "PctUrbWsRp100"  "RdDensWs"        
+# "RdDensWsRp100"      "PctImp2011Cat"      "PctUrbWs"           "PctAgWs"            "PctAgWsRp100"      
+# "RdDensCatRp100"     "PctUrbCatRp100"     "NABD_DensWs"        "FertWs"             "PctImp2011CatRp100"
 
 # Proceed with a regular RF that yields mean weighted values and fit those into the following classification scheme:
 
-# !!!! Theroux et al 2020; Diatom MMI: 1st percentile=0.75, 10th percentile=0.86, 30th percentile=0.94 !!!!
-#Likely condition approach: Compare mean to three ASCI thresholds (0.67, 0.82, 0.93) @ reference sites (1st, 10th, 30th percentiles)
-# Very likely altered: mean < 0.67
-# Likely altered: mean < 0.82
-# Possibly altered: mean < 0.93
-# Likely unaltered: mean >= 0.93
+# Per Theroux et al 2020; Diatom MMI: 1st percentile = 0.75, 10th percentile = 0.86, 30th percentile = 0.94
+# Likely condition approach: Compare mean to three ASCI thresholds (0.75, 0.86, 0.94) @ reference sites (1st, 10th, 30th percentiles)
+# Very likely altered: mean < 0.75
+# Likely altered: mean < 0.86
+# Possibly altered: mean < 0.94
+# Likely unaltered: mean >= 0.94
 
-# Predict scores using the above 10 variables:
+# Predict scores using the above 15 variables:
 
 # Create re-finalized training dataset and include all possible variables. 
 rf_dat2 <- mydf2_train %>%
-  select(asci, RdCrsWs, PctImp2011Ws, PctAgWs, PctUrbWsRp100, PctImp2011WsRp100, PctUrbWs, RdDensWs, DamDensWs, RdDensWsRp100, RdDensCatRp100)
+  select(asci, PctImp2011Ws, RdCrsWs, PctImp2011WsRp100, PctUrbWsRp100, RdDensWs, RdDensWsRp100, PctImp2011Cat, PctUrbWs, PctAgWs, PctAgWsRp100, RdDensCatRp100, PctUrbCatRp100, NABD_DensWs, FertWs, PctImp2011CatRp100)
 
 set.seed(4) # assures the data pulled is random, but sets it for the run below (makes outcome stable)
 myrf2 <- randomForest(y = rf_dat2$asci, # dependent variable
@@ -200,12 +203,12 @@ myrf2 <- randomForest(y = rf_dat2$asci, # dependent variable
   ntrees = 500)  
 
 myrf2 # examine the results. 
-# 39.79% variance explained.
+# 42.2% variance explained.
 summary(myrf2)
 plot(myrf2) # need min of 100 trees.
 varImpPlot(myrf2)
 
-importance2 <- as.data.frame(as.table(myrf2$importance))
+importance2_asci <- as.data.frame(as.table(myrf2$importance))
 View(importance2) # displays the data plotted in the plot above
 
 # Nicer ggplot variable importance plot.
@@ -231,14 +234,11 @@ vip_plot_b <- importance2 %>%
 
 vip_plot <- vip_plot_a + vip_plot_b
 
-vip_plot
+vip_plot + plot_annotation(tag_levels = 'A')
 
-# png(file="asci_vip_plot.png", units="in", width=8, height=5, res=300)
-# vip_plot
-# dev.off()
-
+# Export figure
 # ggsave("asci_vip_plot.png",
-#      path = "/Users/heilil/Desktop/R_figures",
+#      path = "figures",
 #      width = 25,
 #      height = 10,
 #      units = "cm"
@@ -266,14 +266,15 @@ ca_predictions2 <- bind_rows(nottrain_prediction2 %>%
 # This creates the dataset that will be plotted.
 
 # Create table of number of sites that fall into each category.
+# This went through a couple of iterations, so the unused versions have been commented out.
 
-
-# Add classification column. [!!! Theroux et al 2020; Diatom MMI: 1st percentile=0.75, 10th percentile=0.86, 30th percentile=0.94 !!!!]
+# Add classification column.
+# Theroux et al 2020; Diatom MMI: 1st percentile=0.75, 10th percentile=0.86, 30th percentile=0.94
 # ca_predictions2 <- ca_predictions2 %>%
-#   mutate(classification = case_when(round(asci_predicted, digits = 2) < 0.67~"Very Likely Altered",
-#                                     round(asci_predicted, digits = 2) < 0.82~"Likely Altered",
-#                                     round(asci_predicted, digits = 2) < 0.93~"Possibly Altered",
-#                                     round(asci_predicted, digits = 2) >= 0.93~"Likely Unaltered")) %>%
+#   mutate(classification = case_when(round(asci_predicted, digits = 2) < 0.75~"Very Likely Altered",
+#                                     round(asci_predicted, digits = 2) < 0.86~"Likely Altered",
+#                                     round(asci_predicted, digits = 2) < 0.94~"Possibly Altered",
+#                                     round(asci_predicted, digits = 2) >= 0.94~"Likely Unaltered")) %>%
 #   mutate(class_f = factor(classification, levels = c("Very Likely Altered", "Likely Altered", "Possibly Altered", "Likely Unaltered"))) # relevel classifications
 
 # # 3 Thresholds & 4 categories
@@ -292,8 +293,8 @@ ca_predictions2 <- ca_predictions2 %>%
 
 #### Results .csv ####
 # Export results.
-# write_csv(ca_predictions2, "asci_rf_results.csv")
-# write.csv(ca_predictions2, 'L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_rf_results_Theroux.csv')
+# write_csv(ca_predictions2, "data_model_outputs/asci_rf_results_V2.csv")
+# This is a large file, so GitHub may protest a bit when pushing, but it's under the 100MB file size limit.
 
 # Summary table by site #.
 ca_summary <- ca_predictions2 %>%
@@ -306,11 +307,11 @@ ca_summary_length <- ca_predictions2 %>%
 
 # Join and export.
 ca_sum <- full_join(ca_summary, ca_summary_length)
-# write_csv(ca_sum, "asci_rf_results_summary.csv")
-# write.csv(ca_sum, 'L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_rf_results_summary_Theroux.csv')
+write_csv(ca_sum, "data_model_outputs/asci_rf_results_summary_V2.csv")
 
 # Step Five - Quantile Regression model -----------------------------------
 # Note - for the Healthy Watersheds Project, I did not pursue this structure.
+# But I have left in the code for others' and my own future reference.
 # Quantile random forest regression mode, instead of looking at the mode of trees, can compare to 10th, 50th, 90th percentiles etc.
 
 # Need to make a new dataset taking the above results of pickVars into account.
@@ -337,31 +338,25 @@ plot(myqrf) # plots the results.
 
 # Compare predicted vs. actual results, including by PSA region.
 # Adding lines of slope=1 and linear models to each plot.
-val1 <- ggplot(mydf2_train2, aes(x = asci_predicted, y = asci)) +
+(val1 <- ggplot(mydf2_train2, aes(x = asci_predicted, y = asci)) +
   geom_point(color = "#2A3927", alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE, color = "#2A3927") +
   labs(x = "ASCI predicted",
-    y = "ASCI measured",
-    title = "Training Data\nn=912") +
+    y = "ASCI measured") +
   geom_abline(intercept = 0, slope = 1) +
-  theme_bw()
-
-val1
+  theme_bw()) # n = 909
 
 lm1 <- lm(asci~asci_predicted, data = mydf2_train2)
 summary(lm1)
 
-val2 <- ggplot(mydf2_test2, aes(x = asci_predicted, y = asci)) +
+(val2 <- ggplot(mydf2_test2, aes(x = asci_predicted, y = asci)) +
   geom_point(color = "#3793EC", alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE, color = "#3793EC") +
   scale_x_continuous(breaks = c(0.5, 0.7, 0.9)) +
   labs(x = "ASCI predicted",
-    y = "ASCI measured",
-    title = "Testing Data\nn=302") +
+    y = "ASCI measured") +
   geom_abline(intercept = 0, slope = 1) +
-  theme_bw()
-
-val2
+  theme_bw()) # n = 305
 
 lm2 <- lm(asci~asci_predicted, data = mydf2_test2)
 summary(lm2)
@@ -372,44 +367,38 @@ mydf2_train2$set <- "Training"
 full_train_test <- bind_rows(mydf2_test2, mydf2_train2) %>%
   mutate(set_f = factor(set, levels = c("Training", "Testing")))
 
-val3 <- ggplot(full_train_test, aes(x = asci_predicted, y = asci, color = set_f)) +
+# Create list and function with which to rename facet labels
+
+facet_labels <- c("Central_Valley" = "Central Valley", 
+                     "Chaparral" = "Chaparral", 
+                     "Deserts_Modoc" = "Deserts (Modoc)", 
+                     "North_Coast" = "North Coast", 
+                     "Sierra" = "Sierra", 
+                     "South_Coast" = "South Coast")
+
+(val3 <- ggplot(full_train_test, aes(x = asci_predicted, y = asci, color = set_f)) +
   geom_point(alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE) +
   scale_color_manual(name = "Set", values = c("#2A3927", "#3793EC"), drop = FALSE) +
   #xlim(0,1.3) +
   #ylim(0, 1.3) +
   labs(x = "ASCI predicted",
-    y = "ASCI measured",
-    title = "All Data\nn=1,214") +
+    y = "ASCI measured") +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  facet_wrap(~PSA6) +
-  theme_bw()
-
-val3
+  facet_wrap(~PSA6, labeller = as_labeller(facet_labels)) +
+  theme_bw() +
+  theme(legend.position = "bottom")) # n = 1,214
 
 val_fig <- (val1 + val2) /
   (val3)
 
-val_fig + plot_annotation(
-  title = 'ASCI Random Forest Results',
-  subtitle = 'All modeling performed using StreamCAT datasets.',
-  caption = 'Linear models are colored according to dataset. Lines of slope = 1 are denoted in black.'
-)
-
-# png(file="asci_rfmodel_validation.png", units="in", width=8, height=5, res=300)
-# png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/asci_rfmodel_validation_Theroux.png", units="in", width=8, height=5, res=300)
-# val_fig + plot_annotation(
-#   title = 'ASCI Random Forest Results',
-#   subtitle = 'All modeling performed using StreamCAT datasets.',
-#   caption = 'Linear models are colored according to dataset. Lines of slope = 1 are denoted in black.'
-# )
-# dev.off()
+val_fig + plot_annotation(tag_levels = 'A')
 
 # Save figure.
 # ggsave("asci_rfmodel_validation.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 35,
-#      height = 25,
+#      path = "figures",
+#      width = 25,
+#      height = 20,
 #      units = "cm"
 #    )
 
