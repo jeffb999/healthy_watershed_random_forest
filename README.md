@@ -21,9 +21,7 @@ ASCI and CSCI datasets assembled from the SMC database. CRAM datasets downloaded
 
 Models -
 
-Random forest models have been created for ASCI, CSCI, CRAM (overall index score), and RipRAM along with initial validation figures.
-
-Next steps: Creation of additional random forest models for 4 CRAM sub-metrics, and additional validation required for all existing models.
+Random forest models have been created for ASCI, CSCI, CRAM (physical and biotic structure indices), and RipRAM along with initial validation figures.
 
 Files -
 
