@@ -1,8 +1,8 @@
-# CRAM Random Forest Script
+# CRAM Biotic Structure Random Forest Script
 # Revised: November 14, 2021
 # Heili Lowman, Jeff Brown
 
-# The following script will walk through a random forest created to predict state-wide CRAM biotic scores, with datasets from SMC and StreamCat databases. The dependent variable in this case will be the California Rapid Assessment Method (CRAM)biotic index state-wide.
+# The following script will walk through a random forest created to predict state-wide CRAM biotic scores, with datasets from SMC and StreamCat databases. The dependent variable in this case will be the California Rapid Assessment Method (CRAM) biotic index state-wide.
 # Note: this is for the biotic structure metric of CRAM.  There is no V1 of this script.
 
 # Step One - Load In ------------------------------------------------------
