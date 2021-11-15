@@ -1,13 +1,10 @@
-# CRAM Random Forest Draft
-# January 8 ,2021
-# Heili Lowman
+# CRAM Physical Structure Random Forest Script
+# Revised: November 14, 2021
+# Heili Lowman, Jeff Brown
 
-# The following script will walk through a random forest created to predict state-wide CRAM scores, with datasets from SMC and StreamCat databases. The dependent variable in this case will be the California Rapid Assessment Method (CRAM) state-wide.
-
-# Note: this will need to be redone for the 4 sub-CRAM metrics if we choose to model them separately. The below code works through only the overall CRAM index score as the predicted variable.
+# The following script will walk through a random forest created to predict state-wide CRAM physical structure index scores, with datasets from SMC and StreamCat databases. The dependent variable in this case will be the California Rapid Assessment Method (CRAM) physical index state-wide.
 
 # Step One - Load In ------------------------------------------------------
-setwd("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/")             # saved locally
 
 # Load packages.
 library(quantregForest)
@@ -21,10 +18,11 @@ library(nhdplusTools)
 library(patchwork)
 library(Metrics)
 library(gt)
+library(here)
 
 # Load datasets.
 # CRAM data available from SCCWRP database.
-cram_df <- read_csv("cram_rf_data1.csv") %>% # Loads in dataset pulled on 12/23/20.
+cram_df <- read_csv("data_raw/cram_rf_data1.csv") %>% # Loads in dataset pulled on 12/23/20.
   rename(COMID = comid) %>%
   rename(cram = indexscore) %>%
   drop_na(cram) # Drop the NA values.
@@ -32,11 +30,11 @@ skim(cram_df) # Examine the dataset.
 str(cram_df)
 
 # Watershed characteristics' data available from StreamCat.
-ca <- read_csv("streamcat_params.csv")
+ca <- read_csv("data_working/streamcat_params.csv")
 skim(ca)
 str(ca) # Checking to be sure COMID is numeric in both datasets.
 # Perennial stream assessment data available from SCCWRP server.
-ps6 <- read_csv("ps6_params.csv")
+ps6 <- read_csv("data_working/ps6_params.csv")
 # In the ps6_rf_data script, if there are multiple Length_Fin measures for a given COMID, I have chosen the maximum of them and the associated PSA6 designation with that maximum.
 
 # Bind the datasets together.
@@ -75,13 +73,15 @@ mydf2_split <- mydf2 %>%
 # Pulls from training and testing sets created by initial_split()
 mydf2_train <- training(mydf2_split)
 mydf2_test <- testing(mydf2_split)
-# Examine the environment to be sure # of observations looks like the 75/25 split. 613:202.
+# Examine the environment to be sure # of observations looks like the 75/25 split. 610:205.
 
 # Create a separate dataset of available COMIDS that were not used in the training dataset.
 nottrain <- ca %>% # all COMIDS from StreamCat data, sampled or not
-  filter(!COMID %in% mydf2_train$COMID) # Removing sites used to train the model. n = 140,097
+  filter(!COMID %in% mydf2_train$COMID) # Removing sites used to train the model. n = 140,100
 
 # Step Three - Kitchen Sink model -----------------------------------------
+# Will walk through all steps of the protocol for the "kitchen sink" model
+# but variable selection begins in Step Four below.
 
 # Create finalized training dataset and include all possible variables. 
 rf_dat <- mydf2_train %>%
@@ -102,13 +102,13 @@ myrf <- randomForest(y = rf_dat$physicalstructure, # dependent variable
   ntrees = 500) # 500 trees. 
 
 myrf # examine the results.
-# 53.78% variance explained.
+# 53% variance explained.
 
 summary(myrf)
 # mtry allows you to parameterize the number of splits
 
 plot(myrf)
-# model performance appears to improve most at ~150 trees
+# model performance appears to improve most at ~100 trees
 
 varImpPlot(myrf)
 # displays which variables are most important
@@ -116,8 +116,6 @@ varImpPlot(myrf)
 # recommended to weigh left pane more
 # right pane also shows how evenly things split based on the list of predictors
 # values close to 0 can be dropped, but don't have to be
-
-# In both panes - impervious land cover, urban land use, and stream-road crossings appear important
 
 importance <- myrf$importance
 View(importance)
@@ -144,14 +142,12 @@ ca_predictions <- bind_rows(nottrain_prediction %>%
 # This creates the dataset that will be plotted to create a state-wide plot of predicted CRAM scores.
 
 # Plot the data.
-rf_plot1 <- ggplot(ca_predictions, aes(x = PctImp2011CatRp100, y = physstructure_predicted)) +
+(rf_plot1 <- ggplot(ca_predictions, aes(x = PctImp2011CatRp100, y = physstructure_predicted)) +
   geom_point(alpha = 0.1) +
   labs(x = "Mean % imperviousness within catchment and within a 100-m buffer of NHD stream lines",
     y = "Predicted Physical Structure Score") +
   theme_classic() +
-  facet_wrap(.~Set)
-
-rf_plot1
+  facet_wrap(.~Set))
 
 # Step Four - Predictor Selection -----------------------------------------
 
@@ -178,11 +174,10 @@ my_size <- pickSizeTolerance(my_rfe$results, metric = "RMSE", tol = 1, maximize 
 # lower tol (~1) gives you more variables - "I'd like the simplest model within 1% of the best model."
 pickVars(my_rfe$variables, size = my_size)
 
-# pickVars (20):
-# "PctImp2011CatRp100" "PctUrbCatRp100"     "PctAgWsRp100"       "PctImp2011Cat"      "PctImp2011WsRp100"  "RdDensCatRp100"    
-# "RdDensWs"           "RdDensWsRp100"      "RdDensCat"          "PctUrbWsRp100"      "RdCrsCat"           "PctAgWs"           
-# "PctUrbWs"           "PctUrbCat"          "RdCrsWs"            "PctImp2011Ws"       "PctAgCat"           "PctAgCatRp100"     
-# "AgKffactWs"         "DamDensWs"
+# pickVars (15):
+# "PctImp2011CatRp100" "PctUrbCatRp100"     "RdDensCatRp100"     "PctImp2011Cat"      "PctAgWsRp100"      
+# "PctImp2011WsRp100"  "RdDensCat"          "PctUrbWsRp100"      "PctUrbCat"          "PctUrbWs"          
+# "RdDensWs"           "PctAgWs"            "RdDensWsRp100"      "RdCrsWs"            "RdCrsCat"          
 
 # Proceed with a regular RF that yields mean weighted values and fit those into the following classification scheme:
 
@@ -198,11 +193,11 @@ pickVars(my_rfe$variables, size = my_size)
 # Possibly altered: mean < 76
 # Likely unaltered: mean >= 76
 
-# Predict scores using the above 20 variables:
+# Predict scores using the above 15 variables:
 
 # Create re-finalized training dataset and include all possible variables. 
 rf_dat2 <- mydf2_train %>%
-  select(physicalstructure, PctImp2011CatRp100, PctUrbCatRp100, PctAgWsRp100, PctImp2011Cat, PctImp2011WsRp100, RdDensCatRp100, RdDensWs, RdDensWsRp100, RdDensCat, PctUrbWsRp100, RdCrsCat, PctAgWs, PctUrbWs, PctUrbCat, RdCrsWs, PctImp2011Ws, PctAgCat, PctAgCatRp100, AgKffactWs, DamDensWs)
+  select(physicalstructure, PctImp2011CatRp100, PctUrbCatRp100, RdDensCatRp100, PctImp2011Cat, PctAgWsRp100, PctImp2011WsRp100, RdDensCat, PctUrbWsRp100, PctUrbCat, PctUrbWs, RdDensWs, PctAgWs, RdDensWsRp100, RdCrsWs, RdCrsCat)
 
 set.seed(4) # assures the data pulled is random, but sets it for the run below (makes outcome stable)
 myrf2 <- randomForest(y = rf_dat2$physicalstructure, # dependent variable
@@ -213,7 +208,7 @@ myrf2 <- randomForest(y = rf_dat2$physicalstructure, # dependent variable
   ntrees = 500)  
 
 myrf2 # examine the results. 
-# 54.32% variance explained.
+# 54.29% variance explained.
 summary(myrf2)
 plot(myrf2) # need min of 100 trees.
 varImpPlot(myrf2)
@@ -244,22 +239,19 @@ vip_plot_b <- importance2 %>%
 
 vip_plot <- vip_plot_a + vip_plot_b
 
-vip_plot
+vip_plot + plot_annotation(tag_levels = 'A')
 
-# png(file="physicalstructure_vip_plot.png", units="in", width=8, height=5, res=300)
-# vip_plot
-# dev.off()
-
-# ggsave("physicalstructure_vip_plot.png",
-#      #path = "/Users/heilil/Desktop/R_figures",
-#      width = 25,
-#      height = 10,
-#      units = "cm"
-#    )
+# Export figure
+ggsave("cram_physicalstructure_vip_plot.png",
+     path = "figures",
+     width = 25,
+     height = 10,
+     units = "cm"
+   )
 
 # predict(myrf2) # returns out of bag predictions for training data
 
-# Predict CRAM scores state-wide.
+# Predict CRAM physical scores state-wide.
 nottrain_prediction2 <- nottrain %>% # taking all COMIDS that haven't been used in training
   na.omit() %>% # remove NAs
   mutate(physstructure_predicted = predict(myrf2, newdata = nottrain %>% na.omit())) # using developed model (myrf2), inputting predictor variables (nottrain - COMIDs and associated StreamCat data) to predict output/dependent variable (physstructure_predicted a.k.a. CRAM).
@@ -269,7 +261,7 @@ mydf2_train2 <- mydf2_train
 mydf2_train2$physstructure_predicted <- predict(myrf2) # Add column of predicted CRAM scores to training dataset.
 
 mydf2_test2 <- mydf2_test %>%
-  mutate(physstructure_predicted = predict(myrf2, newdata = mydf2_test %>% select(-c(stationcode, physicalstructure, PSA6, Length_Fin)))) # Adds column of predicted ASCI values to testing dataset.
+  mutate(physstructure_predicted = predict(myrf2, newdata = mydf2_test %>% select(-c(stationcode, physicalstructure, PSA6, Length_Fin)))) # Adds column of predicted CRAM values to testing dataset.
 
 # Creates new dataset of bound rows for both ...
 ca_predictions2 <- bind_rows(nottrain_prediction2 %>%
@@ -279,6 +271,7 @@ ca_predictions2 <- bind_rows(nottrain_prediction2 %>%
 # This creates the dataset that will be plotted.
 
 # Create table of number of sites that fall into each category.
+# This went through a couple of iterations, so the unused versions have been commented out.
 
 # Add classification column.
 # ca_predictions2 <- ca_predictions2 %>%
@@ -302,16 +295,13 @@ ca_predictions2 <- ca_predictions2 %>%
                                     round(physstructure_predicted, digits = 0) >= 66 ~"Intact")) %>%
   mutate(class_f = factor(classification, levels = c("Degraded", "Intact"))) # relevel classifications
 
-
 #### Results .csv ####
 # Export results.
-#write_csv(ca_predictions2, "cram_rf_results.csv")
-#write_csv(ca_predictions2, "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_rf_results_81ref.csv")
+write_csv(ca_predictions2, "data_model_outputs/cramphys_rf_results_V2.csv")
 
 # Summary table by site #.
 ca_summary <- ca_predictions2 %>%
   count(class_f) # count sites statewide by classification
-# The numbering is greatly skewed to the "possibly altered" classification, so perhaps other thresholds are necessary.
 
 # Summary table by stream length (m)
 ca_summary_length <- ca_predictions2 %>%
@@ -320,64 +310,36 @@ ca_summary_length <- ca_predictions2 %>%
 
 # Join and export.
 ca_sum <- full_join(ca_summary, ca_summary_length)
-#write_csv(ca_sum, "physicalstructure_rf_results_summary.csv")
-#write_csv(ca_sum, "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_rf_results_summary_81ref.csv")
+write_csv(ca_sum, "data_model_outputs/cramphys_rf_results_summary_V2.csv")
 
 # Step Five - Quantile Regression model -----------------------------------
 
 # Note - for the Healthy Watersheds Project, I did not pursue this structure, but I've kept some example code below in case future iterations call for it.
-
-# Quantile random forest regression mode, instead of looking at the mode of trees, can compare to 10th, 50th, 90th percentiles etc.
-
-# Need to make a new dataset taking the above results of pickVars into account.
-# Create finalized training dataset and include all possible variables. 
-# qrf_dat <- mydf2_train %>%
-#   select(asci, RdCrsWs, PctAgWs, PctUrbWsRp100, PctOpWsRp100, PctOpWs, DamDensWs, RdDensWs, NABD_DensWs, PctUrbWs, PctUrbCatRp100, RdDensWsRp100, PctOpCat, PctUrbCat, RdDensCat, CBNFWs, PctOpCatRp100, PctAgWsRp100, TRIDensWs, AgKffactWs, FertWs) 
-
-# set.seed(20)
-# myqrf <- quantregForest(y = qrf_dat$asci, # dependent variable
-#               x = qrf_dat %>%
-#                   select(-asci),
-#               importance = T, 
-#               proximity = T,
-#               keep.inbag=T,
-#               ntrees = 500) 
-
-#predict(myqrf) # automatically presents 10th %tile, median, and 90th %tile
-#predict(myqrf, what=c(0.2, 0.3, 0.999)) # to print specific quantiles
-
-#plot(myqrf) # plots the results.
-# Again appears to improve after ~100 trees.
+# For additional information on how to pursue this method, see "asci_rf_V2.R" script in this project.
 
 # Step Six - Model validation ---------------------------------------------
 
 # Compare predicted vs. actual results, including by PSA region.
 # Adding lines of slope=1 and linear models to each plot.
-val1 <- ggplot(mydf2_train2, aes(x = physstructure_predicted, y = physicalstructure)) +
+(val1 <- ggplot(mydf2_train2, aes(x = physstructure_predicted, y = physicalstructure)) +
   geom_point(color = "#2A3927", alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE, color = "#2A3927") +
-  labs(x = "Physical Structure predicted",
-    y = "Physical Structure measured",
-    title = "Training Data\nn=613") +
+  labs(x = "CRAM Physical Structure predicted",
+    y = "CRAM Physical Structure measured") +
   geom_abline(intercept = 0, slope = 1) +
-  theme_bw()
-
-val1
+  theme_bw()) # n = 610
 
 lm1 <- lm(physicalstructure~physstructure_predicted, data = mydf2_train2)
 summary(lm1)
 
-val2 <- ggplot(mydf2_test2, aes(x = physstructure_predicted, y = physicalstructure)) +
+(val2 <- ggplot(mydf2_test2, aes(x = physstructure_predicted, y = physicalstructure)) +
   geom_point(color = "#3793EC", alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE, color = "#3793EC") +
   scale_x_continuous(breaks = c(0.5, 0.7, 0.9)) +
-  labs(x = "Physical Structure predicted",
-    y = "Physical Structure measured",
-    title = "Testing Data\nn=202") +
+  labs(x = "CRAM Physical Structure predicted",
+    y = "CRAM Physical Structure measured") +
   geom_abline(intercept = 0, slope = 1) +
-  theme_bw()
-
-val2
+  theme_bw()) # n = 205
 
 lm2 <- lm(physicalstructure~physstructure_predicted, data = mydf2_test2)
 summary(lm2)
@@ -388,45 +350,41 @@ mydf2_train2$set <- "Training"
 full_train_test <- bind_rows(mydf2_test2, mydf2_train2) %>%
   mutate(set_f = factor(set, levels = c("Training", "Testing")))
 
-val3 <- ggplot(full_train_test, aes(x = physstructure_predicted, y = physicalstructure, color = set_f)) +
+# Create list and function with which to rename facet labels
+
+facet_labels <- c("Central_Valley" = "Central Valley", 
+                  "Chaparral" = "Chaparral", 
+                  "Deserts_Modoc" = "Deserts (Modoc)", 
+                  "North_Coast" = "North Coast", 
+                  "Sierra" = "Sierra", 
+                  "South_Coast" = "South Coast")
+
+(val3 <- ggplot(full_train_test, aes(x = physstructure_predicted, y = physicalstructure, color = set_f)) +
   geom_point(alpha = 0.5) +
   geom_smooth(method = "lm", se = FALSE) +
   scale_color_manual(name = "Set", values = c("#2A3927", "#3793EC"), drop = FALSE) +
-  labs(x = "Physical Structure predicted",
-    y = "Physical Structure measured",
-    title = "All Data\nn=815") +
+  labs(x = "CRAM Physical Structure predicted",
+    y = "CRAM Physical Structure measured") +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  facet_wrap(~PSA6) +
-  theme_bw()
-
-val3
+  facet_wrap(~PSA6, labeller = as_labeller(facet_labels)) +
+  theme_bw() +
+  theme(legend.position = "bottom")) # n = 815
 
 val_fig <- (val1 + val2) /
   (val3)
 
-val_fig + plot_annotation(
-  title = 'Physical Structure Random Forest Results',
-  subtitle = 'All modeling performed using StreamCAT datasets.',
-  caption = 'Linear models are colored according to dataset. Lines of slope = 1 are denoted in black.'
-)
-
-# png(file="physicalstructure_rfmodel_validation.png", units="in", width=8, height=5, res=300)
-# png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_rfmodel_validation_81ref.png", units="in", width=8, height=5, res=300)
-# val_fig + plot_annotation(
-#   title = 'Physical Structure Random Forest Results',
-#   subtitle = 'All modeling performed using StreamCAT datasets.',
-#   caption = 'Linear models are colored according to dataset. Lines of slope = 1 are denoted in black.'
-# )
-# dev.off()
-
+val_fig + plot_annotation(tag_levels = 'A')
 
 # Save figure.
-# ggsave("cram_rfmodel_validation.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 35,
-#      height = 25,
+# ggsave("cramphys_rfmodel_validation.png",
+#      path = "figures",
+#      width = 25,
+#      height = 20,
 #      units = "cm"
 #    )
+
+# Generate summary table of linear models for the figures above.
+# Note to future self: make this a for loop
 
 lm3 <- lm(physicalstructure~physstructure_predicted, 
   data = full_train_test %>%
@@ -573,7 +531,6 @@ Pval14     <- summary(lm14)$coefficients[2,4] # get p-value also anova(lm14)$'Pr
 Int14      <- lm14$coefficients[1] # get the y-intercept
 PInt14     <- summary(lm14)$coefficients[1,4] # get the Intercept p-value
 
-
 physicalstructure_lms <- data.frame("Region" = c("Statewide", "Statewide", "Central_Valley", "Central_Valley", "Chaparral", "Chaparral", "Deserts_Modoc", "Deserts_Modoc", "North_Coast", "North_Coast", "Sierra", "Sierra", "South_Coast", "South_Coast"),
                        "Dataset" = c("Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing", "Training", "Testing"),
                        "R2" = c(Rsq1, Rsq2, Rsq3, Rsq4, Rsq5, Rsq6, Rsq7, Rsq8, Rsq9, Rsq10, Rsq11, Rsq12, Rsq13, Rsq14),
@@ -581,18 +538,16 @@ physicalstructure_lms <- data.frame("Region" = c("Statewide", "Statewide", "Cent
                        "Slope_p" = c(Pval1, Pval2, Pval3, Pval4, Pval5, Pval6, Pval7, Pval8, Pval9, Pval10, Pval11, Pval12, Pval13, Pval14),
                        "Intercept" = c(Int1, Int2, Int3, Int4, Int5, Int6, Int7, Int8, Int9, Int10, Int11, Int12, Int13, Int14),
                        "Intercept_p" = c(PInt1, PInt2, PInt3, PInt4, PInt5, PInt6, PInt7, PInt8, PInt9, PInt10, PInt11, PInt12, PInt13, PInt14))
+
 physicalstructure_lms <- physicalstructure_lms %>%
   mutate(Slope_p = round(Slope_p, digits=6)) %>%
   mutate(Slope_p = ifelse(Slope_p < 0.0001, "<0.0001", Slope_p))
-#write_csv(physicalstructure_lms,"L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure.lms.csv" )
 
-# # Import the results of these linear models to generate summary table.
-# 
-# physicalstructure_lms <- read_csv(L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_lms.csv")
-#physicalstructure_lms <- read_csv("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/physicalstructure_lms.csv")
+# Export linear model results.
+write_csv(physicalstructure_lms,"data_model_outputs/cramphys_lms_V2.csv" )
 
 # Run the code and save table to a png file: 
-summary_table <- physicalstructure_lms %>%
+(summary_table <- physicalstructure_lms %>%
   gt(groupname_col = "Region", rowname_col = "Dataset") %>%
   fmt_number(columns = vars(R2, Slope, Intercept, Intercept_p), decimals = 4) %>%
   tab_header(title = "Physicalstructure Results Validation",
@@ -602,40 +557,14 @@ summary_table <- physicalstructure_lms %>%
              Intercept_p = html("<i>p</i>")) %>%
   cols_align(
     align = "left",
-    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p))
-
-summary_table
+    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p)))
 
 # Save table.
-# gtsave(summary_table,
-#   "physicalstructure_rfmodel_lms.png",
-#   path = "/Users/heilil/Desktop/R_figures")
+gtsave(summary_table,
+  "cramphys_rfmodel_lms.png",
+  path = "figures")
 
-
-#webshot::install_phantomjs()
-summary_table <- physicalstructure_lms %>%
-  gt(groupname_col = "Region", rowname_col = "Dataset") %>%
-  fmt_number(columns = vars(R2, Slope, Intercept, Intercept_p), decimals = 4) %>%
-  tab_header(title = "Physicalstructure Results Validation",
-             subtitle = "All modeling performed using StreamCAT datasets.") %>%
-  cols_label(R2 = html("R<sup>2</sup"),
-             Slope_p = html("<i>p</i>"),
-             Intercept_p = html("<i>p</i>")) %>%
-  cols_align(
-    align = "left",
-    columns = vars(R2, Slope, Slope_p, Intercept, Intercept_p)) %>%
-  gtsave(
-    "physicalstructure_rfmodel_lms.png",
-    path = "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds"
-  )
-# 
-
-# gtsave(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_rfmodel_lms.png")
-
-# png("L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_rfmodel_lms.png")
-# summary_table
-# dev.off()
-
+# Create overall process summary table.
 process_summary <- data.frame("Dataframe" = c("ca", "ca_predictions", "ca_predictions2", "full_train_test", "mydf", "mydf2",
                                               "mydf2_test", "mydf2_test2", "mydf2_train", "mydf2_train2", "nottrain",
                                               "nottrain_prediction", "nottrain_prediction2", "ps6", "rf_dat", "rf_dat2"),
@@ -643,11 +572,9 @@ process_summary <- data.frame("Dataframe" = c("ca", "ca_predictions", "ca_predic
                                           nrow(mydf2), nrow(mydf2_test), nrow(mydf2_test2), nrow(mydf2_train), nrow(mydf2_train2),
                                           nrow(nottrain), nrow(nottrain_prediction), nrow(nottrain_prediction2), nrow(ps6),
                                           nrow(rf_dat), nrow(rf_dat2)))
-#write.csv(process_summary, "L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_process_summary.csv")
 
-
-
-
+# Export data
+write_csv(process_summary, "data_model_outputs/cramphys_process_summary_V2.csv")
 
 # Chose not to compute confusion matrix / accuracy score since this is more applicable to categorical ouputs from random forest models -
 # Instead, calculated Root Mean Squared Error (RMSE) of both training and test datasets.
@@ -655,11 +582,11 @@ process_summary <- data.frame("Dataframe" = c("ca", "ca_predictions", "ca_predic
 
 predtest <- predict(myrf2, mydf2_test2)
 rmse(mydf2_test2$physicalstructure,predtest)
-# 13.91942
+# 14.36
 
 predtrain <- predict(myrf2, mydf2_train2)
 rmse(mydf2_train2$physicalstructure,predtrain)
-# 6.337931
+# 6.40
 
 # Double checking using the original random forest dataset (rf_dat) with all 35 possible variables included to see where the error in number of predictors starts to increase dramatically (to help double check our decision to include 25 parameters).
 dc <- rfcv(rf_dat %>%
@@ -670,36 +597,36 @@ dc <- rfcv(rf_dat %>%
 
 dc$error.cv
 # 34       24       17       12        8        6        4        3        2        1 
-# 220.8261 225.4794 230.9605 238.7072 241.4203 248.0797 266.0912 262.9835 296.6211 345.4844 
+# 218.0035 223.5972 222.0357 226.6074 234.9255 238.4074 269.6195 280.8300 287.8224 301.6418 
 
-# Appears between X and Y variables, there is an insignificant increase in error.
-# However, this model is much larger than the CSCI (20) and ASCI (10) models, so we may decide to trim this down in the future.
+# Appears between 34 and 24 variables, there is an insignificant increase in error.
 
 # Step Seven - Map results state-wide -------------------------------------
+
+# Please note, the spatial datasets used to create the final maps are not available
+# on GitHub due to their size.
+# All figures created and exported have also been mapped to the SCCWRP server rather 
+# than this repository's directory.
+# If you would like access to these datasets, please contact Jeff Brown (jeffb@sccwrp.org).
 
 # Using ca_predictions2 dataset generated above. But need to first associate lat/lon with each COMID.
 
 # Load in NHD_Plus_CA dataset from Annie as well as watersheds from Jeff.
 # Full state of California
-#nhd_ca <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Plus_CA/NHDPlus_V2_FLowline_CA.shp") %>%
 nhd_ca <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/NHDPlus_NAD83.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
 # South Coast watersheds - Ventura River, San Juan Creek, San Diego River
-#nhd_ca <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Plus_CA/NHDPlus_V2_FLowline_CA.shp") %>%
 nhd_ca <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/NHDPlus_NAD83.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
 # South Coast watersheds - Ventura River, San Juan Creek, San Diego River
-#nhd_vr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/VenturaRiver_NHD_Clip.shp") %>%
 nhd_vr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/VenturaRiver_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
-#nhd_sjc <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanJuanCreek_NHD_Clip.shp") %>%
 nhd_sjc <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanJuanCreek_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
-#nhd_sdr <- read_sf("/Users/heilil/Desktop/hw_datasets/NHD_Watersheds/SanDiegoRiver_NHD_Clip.shp") %>%
 nhd_sdr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanDiegoRiver_NHD_Clip.shp") %>%
   mutate(COMID = as.numeric(COMID))
 
@@ -707,31 +634,6 @@ nhd_sdr <- read_sf("L:/RipRAM_ES/Data/Working/MapStuff/SanDiegoRiver_NHD_Clip.sh
 mcomid <- ca_predictions2$COMID
 
 # Filter by and plot only modeled stream reaches.
-
-# # Statewide map.  3 thresholds & 4 categories
-# modeled_cram_map <- nhd_ca %>%
-#   filter(COMID %in% mcomid) %>%
-#   inner_join(ca_predictions2) %>%
-#   ggplot() +
-#   geom_sf(aes(color = class_f)) +
-#   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
-#   theme_bw()
-# 
-# modeled_cram_map
-# Note, sometimes this takes forever to render in the "plot" pane.
-# Best to just save to your machine (below) and then take a look.
-
-# png(file="physicalstructure_modeled_CA.png", units="in", width=8, height=5, res=300)
-# png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_CA_81ref.png", units="in", width=8, height=5, res=300)
-# modeled_cram_map
-# dev.off()
-
-# ggsave("physicalstructure_modeled_CA.png",
-#      #path = "/Users/heilil/Desktop/R_figures",
-#      width = 35,
-#      height = 35,
-#      units = "cm"
-#    )
 
 # Statewide map.  1 threshold & 2 categories
 modeled_cram_map <- nhd_ca %>%
@@ -742,43 +644,28 @@ modeled_cram_map <- nhd_ca %>%
   scale_color_manual(name = "Condition", values = c("red2", "steelblue"), drop = FALSE) +
   theme_bw()
 
-#modeled_cram_map
 # png(file="physicalstructure_modeled_CA.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_CA_81ref_2.png", units="in", width=8, height=5, res=300)
 # modeled_cram_map
 # dev.off()
 
-
-
 # Ventura River inset
-
-ventura_cram_map <- nhd_vr %>%
+(ventura_cram_map <- nhd_vr %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
   geom_sf(aes(color = class_f)) +
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "Ventura River") +
-  theme_bw() #+
-  #theme(legend.position = "none")
-
-ventura_cram_map
+  theme_bw())
 
 # png(file="physicalstructure_modeled_Ventura.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_Ventura_81ref.png", units="in", width=8, height=5, res=300)
 # ventura_cram_map
 # dev.off()
 
-# ggsave("physicalstructure_modeled_Ventura.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 15,
-#      height = 15,
-#      units = "cm"
-#    )
-
 # San Juan Creek inset
-
-sanjuan_cram_map <- nhd_sjc %>%
+(sanjuan_cram_map <- nhd_sjc %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
@@ -786,17 +673,15 @@ sanjuan_cram_map <- nhd_sjc %>%
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "San Juan Creek") +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none"))
 
-sanjuan_cram_map
 # png(file="physicalstructure_modeled_SanJuanCreek.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_SanJuanCreek_81ref.png", units="in", width=8, height=5, res=300)
 # sanjuan_cram_map
 # dev.off()
 
 # San Diego River inset
-
-sandiego_cram_map <- nhd_sdr %>%
+(sandiego_cram_map <- nhd_sdr %>%
   filter(COMID %in% mcomid) %>%
   inner_join(ca_predictions2) %>%
   ggplot() +
@@ -804,32 +689,24 @@ sandiego_cram_map <- nhd_sdr %>%
   scale_color_manual(name = "Condition", values = c("red2", "lightpink", "lightskyblue2", "steelblue"), drop = FALSE) +
   labs(title = "San Diego River") +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none"))
 
-sandiego_cram_map
 # png(file="physicalstructure_modeled_SanDiegoRiver.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_SanDiegoRiver_81ref.png", units="in", width=8, height=5, res=300)
 # sandiego_cram_map
 # dev.off()
 
 # South coast sites inset figures
-
 scoast <- (ventura_cram_map) /
   (sanjuan_cram_map) /
   (sandiego_cram_map)
 
 scoast
+
 # png(file="physicalstructure_modeled_SouthCoast.png", units="in", width=8, height=5, res=300)
 # png(file="L:/RipRAM_ES/Data/Working/healthy_watershed_random_forest/Results using published thresholds/physicalstructure_modeled_SouthCoast_81ref.png", units="in", width=8, height=5, res=300)
 # scoast
 # dev.off()
-
-# ggsave("physicalstructure_modeled_SCoast.png",
-#      path = "/Users/heilil/Desktop/R_figures",
-#      width = 20,
-#      height = 40,
-#      units = "cm"
-#    )
 
 # Additional Notes - Healthy Watersheds project ---------------------------
 
@@ -846,7 +723,7 @@ scoast
 # Possibly altered: q50 < 90
 # Likely unaltered: q50 >= 90
 
-# Condition approach favored by Anna per meeting on 11/3/2020.
+# Condition approach favored per meeting on 11/3/2020.
 
 # Works Cited:
 
